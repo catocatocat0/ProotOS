@@ -1,8 +1,14 @@
 # Katxe's ProotOS
  
-A library for driving protogens using a HUB75 style matri
+A library for driving protogens using a HUB75 style matrix using an ESP32
 
 Based on PanickingLynx's ProtOpenSource code! Check them out here: https://github.com/PanickingLynx/ProtOpenSource!
+
+## Features
+
+Comes with boop functionality! Use any sensor like capacitive, buttons or even IR!
+
+Has microhpone capabilities with max4466 microphones!
 
 ## Instructions:
 
