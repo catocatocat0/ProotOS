@@ -3,5 +3,8 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
-lib/FacialSprites/Katxe_Sprites
-lib/FacialSprites/old_sprites
+# Ignore everything in lib/FacialSprites
+lib/FacialSprites/*
+# Except .bat and .py files
+!lib/FacialSprites/*.bat
+!lib/FacialSprites/*.py

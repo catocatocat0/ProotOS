@@ -10,7 +10,7 @@ This program lets you turn .png and .gif files into code that displays however y
 
 Comes with boop functionality! Use any sensor like capacitive, buttons or even IR!
 
-Has microhpone capabilities with max4466 microphones!
+Has microphone and talking animation capabilities using the max4466!
 
 ## Instructions:
 
