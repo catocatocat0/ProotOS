@@ -19,8 +19,8 @@
 #define P_A 19
 #define P_B 23
 #define P_C 18
-#define P_D 5
-#define P_E 15 
+#define P_D 5 //After pin C in the PxMatrix graphic from the link above, the pin says GND. Wire that as pin D if using a 32x64 display
+#define P_E 15 //Don't actually wire this pin, the 32x64 displays only require P_D for the scan pattern. If you wire this it will break.
 #define P_OE 16
 
 // This defines the 'on' time of the display in use. The larger this number,
@@ -229,4 +229,3 @@ void playAnimation(int offset_x, int offset_y, Animation animation, bool overlay
       display.display(display_draw_time);
     }
   }
-

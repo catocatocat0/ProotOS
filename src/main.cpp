@@ -1,13 +1,16 @@
 /*NOTE: BEFORE USING --------------------------------------------------------
 
 Use VSCode and platformio to flash the ESP32. Make sure to change platformio.ini configs to the specific boards you are using.
-This code has been tested on a FireBeetle ESP32-2 and a standard WROOM devboard. 
+This code has been tested on a FireBeetle ESP32-2 and a standard ESP32 devboard. 
 
 Wire your board as follows from this github: https://github.com/2dom/PxMatrix.
+
+Based on https://github.com/PanickingLynx/ProtOpenSource 
+The code uses a modified wiring scheme, make sure to read which pins go where in drawfaces.h!
+By Katxe
+Telegram: @Katxe
+Bsky: @katxe.bsky.social
 */
-//Based on https://github.com/PanickingLynx/ProtOpenSource 
-//The code uses a modified wiring scheme, make sure to read which pins go where! Check out drawfaces.h!
-//Modified by @Katxe
 
 //Uncomment this if your matrices are displaying errors like color shifts or flickering pixels (Mostly the case with matrices bought from AliExpress)
 #define PxMATRIX_SPI_FREQUENCY 19900000
@@ -28,13 +31,14 @@ Wire your board as follows from this github: https://github.com/2dom/PxMatrix.
 
 #define MIC_PIN 25 //Connect the OUT pin on the MAX4466 onto this pin.
 #define BOOP_PIN 33 //This pin is used to detect booping and confirm bluetooth pairing. Connect it to a positive output of your sensor relative to ground.
-#define FACE_SELECTOR 32 //This pin cycles through the protogen emotions
+#define FACE_SELECTOR 32 //This pin cycles through the protogen emotions, wire a button connected to 3.3v for this pin. 
 
 //These are our function predefines 
 void isSpeaking(uint8_t picker); 
 void isIdle();
 void Task2code( void * pvParameters );
 void IRAM_ATTR boopISR();
+void IRAM_ATTR selectFaceISR();
 
 //Predefining up task variables for dual core operation.
 TaskHandle_t Task1; 
@@ -101,6 +105,7 @@ void setup(){
     0             // pin task to core 1
   );
 
+  //Run all the start up commands to initialize the display
   startUP();
 }
 
@@ -228,7 +233,7 @@ void isSpeaking(uint8_t picker){
   }
 }
 
-//This displays our idle animation for when no speaking is detected. Works the same way as isSpeaking() minus the face picker variable.
+//This displays our idle animation for when no speaking is detected. Works the same way as isSpeaking() with the talk selector replaced with face selector.
 void isIdle(){
   display.clearDisplay();
   previousMillis = currentMillis;
