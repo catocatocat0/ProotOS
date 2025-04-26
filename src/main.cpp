@@ -85,7 +85,7 @@ void setup(){
   //This sets up our interrupt functions
   pinMode(BOOP_PIN, INPUT_PULLUP);
   attachInterrupt(BOOP_PIN, boopISR, RISING);
-  attachInterrupt(FACE_SELECTOR, boopISR, FALLING);
+  attachInterrupt(FACE_SELECTOR, selectFaceISR, FALLING);
 
   //This sets up bluetooth. *WIP*
   //setupBluetooth();
