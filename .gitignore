@@ -5,6 +5,7 @@
 .vscode/ipch
 # Ignore everything in lib/FacialSprites
 lib/FacialSprites/*
-# Except .bat and .py files
+# Except .bat, .py and .h files
 !lib/FacialSprites/*.bat
 !lib/FacialSprites/*.py
+!lib/FacialSprites/*.h
