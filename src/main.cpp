@@ -6,7 +6,7 @@ This code has been tested on a FireBeetle ESP32-2 and a standard WROOM devboard.
 Wire your board as follows from this github: https://github.com/2dom/PxMatrix.
 */
 //Based on https://github.com/PanickingLynx/ProtOpenSource 
-//The code uses a modified wiring scheme, make sure to read which pins go where!.
+//The code uses a modified wiring scheme, make sure to read which pins go where! Check out drawfaces.h!
 //Modified by @Katxe
 
 //Uncomment this if your matrices are displaying errors like color shifts or flickering pixels (Mostly the case with matrices bought from AliExpress)
