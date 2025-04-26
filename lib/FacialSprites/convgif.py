@@ -3,7 +3,6 @@
 import PIL.Image as Image
 from PIL import ImageSequence
 import glob as glb
-import time
 
 if __name__ == '__main__':
     f = open("./animations.h", "w")
