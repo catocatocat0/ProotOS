@@ -6,22 +6,23 @@ import glob as glb
 
 if __name__ == '__main__':
     f = open("./animations.h", "w")
-    f.write("class Animation{public: const uint32_t** animation;const uint16_t* frameTimes;const int numFrames;Animation(const uint32_t** a, const uint16_t* b, const int c):animation(a), frameTimes(b), numFrames(c) {}};"+"\n\n")
+    f.write("class Animation{\n\tpublic:\n\t\tconst uint32_t* animation;\n\t\tuint32_t numFrames;\n\t\tuint32_t arrayLength;\n\t\tuint32_t Width;\n\t\tuint32_t Height;\n\n\t\tAnimation(const uint32_t* a):animation(a){\n\t\t\tnumFrames = animation[0];\n\t\t\tarrayLength = animation[1];\n\t\t\tWidth = animation[2];\n\t\t\tHeight = animation[3];\n\t\t}\n};\n\n")
 
     for filename in glb.glob("./*.gif"):
         name = filename.split(".")[1].split("\\")[-1]
         image = Image.open(filename)
-        animation_array = ""
         frame_count = 0
         frame_times = ""
+        all_frames_data = []  
+        frame_offsets = []    
+        total_size = 0
         
         print("Encoding: "+filename.split(".")[1].split("\\")[-1])    
         for idx, frame in enumerate(ImageSequence.Iterator(image)):
+            if name == "apple" and not idx % 10 == 0:
+                continue
             unencoded_data = []
-            animation_array = animation_array + name + str(idx+1) + ","
-            frame_count = idx + 1
             frame_times+=str(frame.info['duration'])+","
-
             #Set to True to enable mirroring
             if False:
                 newframe = Image.new(mode="RGB", size=(frame.size[0]*2, frame.size[1]))
@@ -32,7 +33,6 @@ if __name__ == '__main__':
             height = newframe.size[1]
             width = newframe.size[0]
             
-            f.write("const uint32_t PROGMEM static "+name+str(idx+1)+"[] = {"+str(width)+", "+str(height)+", ")
             for y in range(height):
                 for x in range(width):
                     r, g, b = newframe.getpixel((x, y))
@@ -43,42 +43,54 @@ if __name__ == '__main__':
             prevInt = (unencoded_data[0][0] << 24 | unencoded_data[0][1] << 16 | unencoded_data[0][2] << 8) & 0xffffffff
             counter = 0
             integer = 0
-            encoded_data = []
+            encoded_data = [] 
 
             for item in unencoded_data[1:]:
-                
+                #ENCODING SCHEME: RRRRRRRR GGGGGGGG BBBBBBBB WWWWWWWWW
+                #R - Red (8 bits)
+                #B - Blue (8 bits)
+                #G - Green (8 bits)
+                #W - Number of times to repeat pixel (8 bits)
                 integer = (item[0] << 24 | item[1] << 16 | item[2] << 8) & 0xffffffff
                 if prevInt == integer and counter < 255:
                     counter+=1
+                    
                 else:
                     encoded_data.append(prevInt | (counter & 0xffffffff))
                     counter = 0
                     print("Encoded uint32: {}".format(bin(encoded_data[-1] & 0xffffffff)))
 
                 prevInt = integer
+            frame_count += 1
             
             #appends the last element
             encoded_data.append(prevInt | (counter & 0xffffffff))
+            array_size = len(encoded_data)
+            total_size += array_size
 
-            #Adds in the size of the image array to the 3rd element:
-            f.write("{0}, ".format(len(encoded_data)))
+            #Encode metadata into 32 bit integer:
+            #ENCODING SCHEME: AAAAAAAAAAA WWWWWWWWWWWWWWWWWWWW
+            #A - Array Size (12 bits)
+            #D - Frame duration in ms (20 bits)
+            encoded_metadata = (array_size << 20 | frame.info['duration']) & 0xffffffff
+            all_frames_data.append([encoded_metadata] + encoded_data)
 
-            #Write the encoded image to a file:
-            for elements in encoded_data:
-                f.write("{0}, ".format(elements))
-
-            f.write("};\n")
+        # Add animation metadata
+        # 0th entry: Number of frames
+        # 1st entry: Data size
+        # 2nd entry: Animation Width
+        # 3rd entry: Animation Height
+        all_frames_data.insert(0,height)
+        all_frames_data.insert(0,width)
+        all_frames_data.insert(0,total_size+frame_count)
+        all_frames_data.insert(0,frame_count)
 
         print("Array size: {}".format(len(encoded_data)))
 
-        #Creates a pointer to our animation arrays
-        f.write("\nconst uint32_t* ANI_"+name+"[] = {"+animation_array+"};\n")
-
-        #Creates an array with the frametimes
-        f.write("const uint16_t FRAME_TIMES_"+name+"[] = {"+frame_times+"};\n")
-
-        #Creates the Animation class to use:
-        f.write("Animation "+name+"(ANI_"+name+",FRAME_TIMES_"+name+","+str(frame_count)+");\n\n")
+        # Write the combined data array for the animation
+        f.write("const uint32_t PROGMEM {}_DATA[] = {{\n".format(name))
+        f.write(", ".join(map(str, all_frames_data)).replace("]","").replace("[","") + "\n};\n")
+        f.write("Animation "+name+"("+name+"_DATA"+");\n\n")
 
     f.close()
 print("-------------ENCODING FINISHED-------------")

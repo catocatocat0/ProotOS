@@ -141,7 +141,7 @@ void loop(){
           booped = false;
           break;
         case 5:
-          holdFace(5000, false, 0, 0, bsod2, false, false);
+          playAnimation(0, 0, apple, true, true);
           booped = false;
           break;
       }
