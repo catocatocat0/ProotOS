@@ -16,8 +16,8 @@
 // ============================================================================
 
 // Maximum number of facial expressions that can be registered in `faceSelector`.
-// Increase this value if you add more than 10 faces.
-#define MAX_FACES 10
+// Increase this value if you add more than 255 faces.
+#define MAX_FACES 255
 
 
 // ============================================================================
@@ -32,7 +32,7 @@
  * - Setting `modifier = nullptr` disables post-processing effects (aberration/CRT).
  * - Setting `canTalk = false` (or leaving `talkPool` empty / `{ nullptr }`)
  *   disables speaking animations for that face.
- * - Pools with fewer than 5 sprites (e.g., `{ talk1, talk2 }`) have their valid
+ * - Pools with fewer than 10 sprites (e.g., `{ talk1, talk2 }`) have their valid
  *   sprite count automatically detected and cached by `initCounts()`.
  */
 struct Face {

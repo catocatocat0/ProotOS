@@ -16,8 +16,8 @@
 // ============================================================================
 
 // Maximum number of boop reactions that can be registered in `boopPool`.
-// Increase this value if you add more than 10 boop reactions.
-#define MAX_BOOP_ANIMATIONS 10
+// Increase this value if you add more than 255 boop reactions.
+#define MAX_BOOP_ANIMATIONS 255
 
 
 // ============================================================================
