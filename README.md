@@ -153,7 +153,7 @@ ProotOS uses a weighted pool system for boops: when someone boops your visor, it
 Open **`src/user/boops.h`**. A `Boop` can be:
 - **A GIF animation** (set `.animation = &yourGif` and `.staticSprite = nullptr`)
 - **A static `.png` image held for a set time** (set `.animation = nullptr` and `.staticSprite = yourPng`)
-- **Chained (GIF followed immediately by a static image!)** (set **both** `.animation = &yourGif` and `.staticSprite = yourPng`—the GIF will play first, and then the static image will hold on screen for `.holdTime` milliseconds!)
+
 
 If you define both a gif and a static animation, it will play both of them sequentially with the animation coming first.
 
