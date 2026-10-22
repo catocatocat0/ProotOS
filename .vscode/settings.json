@@ -20,5 +20,7 @@
         "boards/esp32-wrover-kit-3.3v.cfg"
     ],
     "idf.portWin": "COM9",
-    "idf.customAdapterTargetName": "firebeetle"
+    "idf.customAdapterTargetName": "firebeetle",
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda"
 }

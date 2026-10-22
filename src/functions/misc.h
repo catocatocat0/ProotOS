@@ -1,22 +1,45 @@
-//This header file defines miscellanous functions (typically math stuff)
+/* ============================================================================
+ * MISCELLANEOUS MATH & SIGNAL FILTERING FUNCTIONS
+ * ============================================================================
+ * Defines helper utilities (primarily math and signal processing).
+ * ============================================================================ */
 
-//Predefine functions
-int rollingAverage(int val);
+#pragma once
 
-//These are our variables for the rolling average function.
+// ============================================================================
+// ROLLING AVERAGE CONFIGURATION & STATE
+// ============================================================================
+
 const int avgWindow = 2;
-int avgIndex = 0;
-int avgSum = 0;
+int avgIndex        = 0;
+int avgSum          = 0;
 int avgBuffer[avgWindow];
 
-//This function takes an integer and averages it with the previous value sent to it. It basically functions as a cheap low-pass filter to remove sudden loud noises and other people talking
-//val - the value you want the rolling average of
-//returns the rolling average of val
-int rollingAverage(int val){
-  avgSum = avgSum - avgBuffer[avgIndex];       // Remove the oldest entry from the sum
-  avgBuffer[avgIndex] = val;           // Add the newest reading to the window
-  avgSum = avgSum + val;                 // Add the newest reading to the sum
-  avgIndex = (avgIndex+1) % avgWindow;   // Increment the index, and wrap to 0 if it exceeds the window size
 
-  return avgSum / avgWindow;      // Divide the sum of the window by the window size for the result
+// ============================================================================
+// FUNCTION PROTOTYPES
+// ============================================================================
+
+int rollingAverage(int val);
+
+
+// ============================================================================
+// FUNCTION IMPLEMENTATIONS
+// ============================================================================
+
+/**
+ * Computes a rolling average of the input value over `avgWindow` samples.
+ * Acts as a simple low-pass filter to smooth out sudden loud spikes or
+ * background chatter from the microphone signal.
+ *
+ * @param val  The new sample value to include in the rolling average
+ * @return     The averaged value across the current window
+ */
+int rollingAverage(int val) {
+  avgSum = avgSum - avgBuffer[avgIndex]; // Remove the oldest entry from the sum
+  avgBuffer[avgIndex] = val;             // Add the newest reading to the window
+  avgSum = avgSum + val;                 // Add the newest reading to the sum
+  avgIndex = (avgIndex + 1) % avgWindow; // Advance index and wrap around window size
+
+  return avgSum / avgWindow;             // Return the average across the window
 }

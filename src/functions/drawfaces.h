@@ -1,217 +1,275 @@
-//This header file defines functions relating to the display and outputtting images 
+/* ============================================================================
+ * DISPLAY & FACIAL RENDERING FUNCTIONS
+ * ============================================================================
+ * Defines hardware pin mappings, HUB75 DMA initialization, and rendering
+ * routines for RLE-encoded static sprites and multi-frame GIF animations.
+ * ============================================================================ */
 
-//Define matrix dimensions
-#define matrix_width 128
-#define matrix_height 32
+#pragma once
 
-//Load dependencies
+// ============================================================================
+// DEPENDENCIES & SPRITE ASSETS
+// ============================================================================
+
 #include <Adafruit_GFX.h>
-#include <Adafruit_I2CDevice.h>
-#include <PxMatrix.h>
+#include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #include "facemodifiers.h"
 
-//Load Sprites
+// Sprite & Animation Data
 #include "images.h"
 #include "animations.h"
 
-//Initialize the different face modifiers
+
+// ============================================================================
+// MATRIX DIMENSIONS & HARDWARE PIN DEFINITIONS
+// ============================================================================
+
+#define matrix_width  128
+#define matrix_height 32
+
+// HUB75 Pin Mapping (adjust to match your wiring)
+#define R1_PIN  25
+#define G1_PIN  26
+#define B1_PIN  27
+#define R2_PIN  14
+#define G2_PIN  12
+#define B2_PIN  13
+#define A_PIN   23
+#define B_PIN   19
+#define C_PIN   5
+#define D_PIN   17
+#define E_PIN   -1  // Required for 1/32 scan panels (e.g., 64x64px); set to an available pin like IO32 if needed
+#define CLK_PIN 16
+#define LAT_PIN 4
+#define OE_PIN  15
+
+
+// ============================================================================
+// DISPLAY & MODIFIER INSTANCES
+// ============================================================================
+
+// Pointer to the HUB75 DMA display driver
+MatrixPanel_I2S_DMA* display = nullptr;
+
+// Post-processing face effect modifiers
 AberrationModifier* abberation = new AberrationModifier();
-CRTModifier* crt = new CRTModifier();
+CRTModifier*        crt        = new CRTModifier();
 
-//Connect these pins to your matrix. More information on wiring can be found here: https://github.com/2dom/PxMatrix
-#define P_LAT 22
-#define P_A 19
-#define P_B 23
-#define P_C 18
-#define P_D 5 //After pin C in the PxMatrix graphic from the link above, the pin says GND. Wire that as pin D if using a 32x64 display
-#define P_E 15 //Don't actually wire this pin, the 32x64 displays only require P_D for the scan pattern. If you wire this it will break.
-#define P_OE 16
 
-// This defines the 'on' time of the display in use. The larger this number,
-// the brighter the display. The ESP will crash if this number is too high.
-uint8_t display_draw_time = 100; //10-50 is usually fine
-PxMATRIX display(128, 32, P_LAT, P_OE, P_A, P_B, P_C, P_D, P_E);
+// ============================================================================
+// FUNCTION PROTOTYPES
+// ============================================================================
 
-//Function predefines
+void startUP();
 void drawFace(int offset_x, int offset_y, const uint32_t image[], bool overlay, bool mirror, FaceModifier* modifier = nullptr);
 void playAnimation(int offset_x, int offset_y, Animation animation, bool overlay, bool mirror);
 void holdFace(int time, int offset_x, int offset_y, const uint32_t image[], bool overlay, bool mirror, FaceModifier* modifier = nullptr);
-void startUP();
 
-//This function initializes the display
-void startUP(){
+
+// ============================================================================
+// DISPLAY INITIALIZATION
+// ============================================================================
+
+/**
+ * Initializes Serial, configures the HUB75 I2S DMA matrix panel with double
+ * buffering, and displays the startup splash screen.
+ */
+void startUP() {
   Serial.begin(115200);
-  display.begin(16);
-  display.display(display_draw_time);
-  display.setFastUpdate(false);
-  display.setBrightness(255);
-  display.setPanelsWidth(2);
-  display.setTextColor(display.color565(0,0,255));
-  display.setCursor(16, 0);
-  display.print("BOOTING UP...."); 
-  display.setTextColor(display.color565(255,255,255));
-  display.setCursor(16, 8);
-  display.print("KATXE PROTOGEN OS"); 
-  display.showBuffer();
+
+  // Pin mapping configuration struct
+  HUB75_I2S_CFG::i2s_pins _pins = {
+    R1_PIN, G1_PIN, B1_PIN,
+    R2_PIN, G2_PIN, B2_PIN,
+    A_PIN, B_PIN, C_PIN, D_PIN, E_PIN,
+    LAT_PIN, OE_PIN, CLK_PIN
+  };
+
+  // Matrix panel configuration (64x32 per panel, 2 panels chained)
+  HUB75_I2S_CFG mxconfig(
+    64,    // Width of a single panel
+    32,    // Height of a single panel
+    2,     // Number of panels chained
+    _pins  // Pin mapping struct
+  );
+
+  // Enable double buffering for tear-free frame updates
+  mxconfig.double_buff = true;
+
+  // Increase I2S DMA clock speed and target refresh rate to reduce camera shutter flicker
+  mxconfig.i2sspeed = HUB75_I2S_CFG::HZ_20M;
+  mxconfig.min_refresh_rate = 120;
+
+  // Initialize display driver
+  display = new MatrixPanel_I2S_DMA(mxconfig);
+  display->begin();
+  display->setBrightness8(255); // DMA brightness scaling (0–255)
+
+  // Render boot splash screen
+  display->clearScreen();
+  display->setTextColor(display->color565(0, 0, 255));
+  display->setCursor(16, 0);
+  display->print("BOOTING UP....");
+
+  display->setTextColor(display->color565(255, 255, 255));
+  display->setCursor(16, 8);
+  display->print("KATXE PROTOGEN OS");
+
+  // Push back buffer to screen, hold for 3 seconds, then clear
+  display->flipDMABuffer();
   delay(3000);
-  display.showBuffer();
-  display.clearDisplay();
+  display->clearScreen();
+  display->flipDMABuffer();
 }
 
-//This function draws images generated by convimg.py in FacialSprites.
-//offset_x - The x offset for the image
-//offset_y - The y offset for the image
-//image[] - The image to draw on the screen. The first 3 entries are width, height and array size. The images are encoded using run length encodinbg (RLE) and are formatted as follows: first 3 bytes are RGB, last byte is how many times to repeat.
-//overlay - This function uses a double buffer for seamless transitions. Setting to false will cause the display not to switch buffers, letting you overlay images on top of eachother.
-//mirror - This mirrors the image if set to true
-//modifier - this parameter sets what modidifier to perform on the image before displaying it, optional, if excluded, no modifier will be included
+
+// ============================================================================
+// SPRITE & ANIMATION RENDERING FUNCTIONS
+// ============================================================================
+
+/**
+ * Decodes and draws a static RLE-encoded RGB565 image (generated by `convimg.py`).
+ *
+ * @param offset_x  Horizontal pixel offset
+ * @param offset_y  Vertical pixel offset
+ * @param image     RLE-encoded sprite array:
+ *                  - Entries 0–2: width, height, and encoded data array size
+ *                  - Entries 3+:  bits 23–8 = 16-bit RGB565 color, bits 7–0 = repeat count
+ * @param overlay   If false, clears the frame buffer before drawing; if true, overlays on top
+ * @param mirror    If true, mirrors the image horizontally across the second panel
+ * @param modifier  Optional post-processing effect (e.g., aberration, CRT); nullptr for none
+ */
 void drawFace(int offset_x, int offset_y, const uint32_t image[], bool overlay, bool mirror, FaceModifier* modifier) {
-    //From our array, this extracts the metadata of our image from the first 3 entries.aaaa
-    int imgWidth = image[0];
-    int imgHeight = image[1];
-    int arraySize = image[2];
+  // Guard against null sprite pointers
+  if (image == nullptr) {
+    return;
+  }
 
-    //This clears our frame buffer if overlay is set to false
-    if(!overlay){
-      display.clearDisplay();
+  // Extract Image Metadata
+  int imgWidth  = image[0];
+  int imgHeight = image[1];
+  int arraySize = image[2];
+
+  // Clear the back buffer unless overlaying on top of existing content
+  if (!overlay) {
+    display->clearScreen();
+  }
+
+  // Decode Run-Length Encoded (RLE) RGB565 Pixel Data into a reusable static buffer
+  static uint16_t pixelBuffer[matrix_width * matrix_height];
+  uint32_t        pixcounter = 0;
+
+  for (int i = 0; i < arraySize; i++) {
+    uint32_t pix    = image[i + 3];
+    uint16_t rgb565 = (pix >> 8) & 0xFFFF;
+    uint8_t  count  = pix & 0xFF;
+
+    for (int j = 0; j <= count; j++) {
+      pixelBuffer[pixcounter++] = rgb565;
+    }
+  }
+
+  // Apply Modifier Setup (if active)
+  if (modifier) {
+    modifier->frameBegin(pixelBuffer, imgWidth, imgHeight);
+  }
+
+  // Render Pixels to Display Buffer
+  for (int i = 0; i < imgWidth * imgHeight; i++) {
+    int x = i % imgWidth;
+    int y = i / imgWidth;
+
+    uint16_t currpix = pixelBuffer[i];
+
+    // Process pixel through effect modifier if provided
+    if (modifier) {
+      currpix = modifier->process(i, pixelBuffer, imgWidth, imgHeight);
     }
 
-    //We decode our RLE encoding and store the pixels in a separate array
-    uint32_t* pixelBuffer = new uint32_t[imgWidth * imgHeight];
-    uint32_t pixcounter = 0;
-    for(int i = 0; i < arraySize; i++) {
-        uint32_t pix = image[i+3];
-        uint8_t r = (pix >> 24) & 0xFF;
-        uint8_t g = (pix >> 16) & 0xFF;
-        uint8_t b = (pix >> 8) & 0xFF;
-        uint8_t count = pix & 0xFF;
+    display->drawPixel(x + offset_x, y + offset_y, currpix);
 
-        for(int j = 0; j <= count; j++) {
-          pixelBuffer[pixcounter] = (r << 24) | (g << 16) | (b << 8) & 0xFFFFFFFF;
-          pixcounter++;
-        }
+    if (mirror) {
+      display->drawPixel(offset_x + imgWidth * 2 - x - 1, y + offset_y, currpix);
     }
+  }
 
-    if(modifier){
-      modifier->frameBegin(pixelBuffer, imgWidth, imgHeight);
-    }
+  // Finalize Frame & Display
+  if (modifier) {
+    modifier->frameComplete(pixelBuffer, imgWidth, imgHeight);
+  }
 
-    //We then begin drawing the pixels andapplying special effect modifiers
-    for(int i = 0; i < imgWidth * imgHeight; i++) {
-        int x = i % imgWidth;
-        int y = i / imgWidth;
-
-        uint32_t currpix = pixelBuffer[i];
-
-        //If the modifier is not null, we then apply the modifier which modifies pixelBuffer
-        if(modifier) {
-            currpix = modifier->process(i, pixelBuffer, imgWidth, imgHeight);
-        }
-
-        //We then read our pixelBuffer
-        uint8_t r = (currpix >> 24) & 0xFF;
-        uint8_t g = (currpix >> 16) & 0xFF;
-        uint8_t b = (currpix >> 8) & 0xFF;
-
-        display.drawPixelRGB888(x + offset_x, y + offset_y, r, g, b);
-        if(mirror) {
-            display.drawPixelRGB888(offset_x + imgWidth*2 - x - 1, y + offset_y, r, g, b);
-        }
-    }
-
-    if(modifier){
-      modifier->frameComplete(pixelBuffer, imgWidth, imgHeight);
-    }
-
-    delete[] pixelBuffer;
-
-    display.showBuffer();
+  display->flipDMABuffer();
 }
 
-//This function plays an animation generated by convgif.py in FacialSprites
-//offset_x - The x position offset of our animation
-//offset_y - The y position offset of our animation
-//animation - This is the animation variable generated by convgif. It is the filename of the .gif file inputted into convgif.py
-//overlay - This determines whether or not to overlay the next frame ontop of the previous frame. Usually you want to set it to true unless you have smaller frames
-void playAnimation(int offset_x, int offset_y, Animation animation, bool overlay, bool mirror){
+/**
+ * Plays a multi-frame RLE-encoded animation (generated by `convgif.py`).
+ *
+ * The `Animation` struct (populated by `convgif.py`) contains:
+ * - `animation`:   Pointer to raw RLE animation data (first 4 entries are global metadata)
+ * - `numFrames`:   Total number of frames in the animation
+ * - `arrayLength`: Total length of the animation array
+ * - `Width`:       Frame width in pixels
+ * - `Height`:      Frame height in pixels
+ *
+ * @param offset_x   Horizontal pixel offset
+ * @param offset_y   Vertical pixel offset
+ * @param animation  Animation struct instance (named after the source `.gif` file)
+ * @param overlay    If false, clears the frame buffer before each frame; usually true unless frames are smaller
+ * @param mirror     If true, mirrors each frame horizontally across the second panel
+ */
+void playAnimation(int offset_x, int offset_y, Animation animation, bool overlay, bool mirror) {
+  uint32_t        numFrames   = animation.numFrames;
+  uint32_t        arrayLength = animation.arrayLength;
+  uint32_t        Width       = animation.Width;
+  uint32_t        Height      = animation.Height;
+  const uint32_t* aniArray    = animation.animation;
 
-    //Inside the Animation class are 5 variables:
-    //animation - array containing our animation (first 5 entries are metadata)
-    //numFrames - Total number of frames contained in the animation
-    //arrayLength - Length of the animation data
-    //Width - Width of the animation
-    //Height - Height of the animation
-    //All these values are automatically filled for you via convgif.py
+  // Tracks the starting index of the current frame in `aniArray`
+  // (Starts at index 4 because the first 4 entries hold global metadata)
+  uint32_t offset = 4;
 
-		uint32_t numFrames = animation.numFrames;
-		uint32_t arrayLength = animation.arrayLength;
-		uint32_t Width = animation.Width;
-		uint32_t Height = animation.Height;
-    const uint32_t* aniArray = animation.animation;
-
-    //This keeps track of how much we need to offset in the animation array by to reach the next frame
-    //Initially set to 4 since first 4 bytes is metadata
-    uint32_t offset = 4;
-
-    for(int i = 0; i < numFrames; i++){
-
-      //This clears our frame buffer if overlay is set to false
-      if(!overlay){
-        display.clearDisplay();
-      }
-      
-      //Unpacks the frame's metadata
-      uint32_t frameMetaData = aniArray[offset];
-      uint32_t frameDataSize = (frameMetaData >> 20 & 0xFFF);
-      uint32_t frameDuration = (frameMetaData & 0xFFFFF);
-
-      int pixel_index = 0;
-      for(int j = 0; j < frameDataSize; j++){
-        
-        //This selects the current chunk of pixels to process
-        //We offset by 3 because first 3 entries are width, height and array size
-        uint32_t pix = aniArray[j+offset+1];
-    
-        //This unpacks the first 3 bytes into RGB values
-        uint8_t r = (pix >> 24 & 0xFF);
-        uint8_t g = (pix >> 16 & 0xFF);
-        uint8_t b = (pix >> 8 & 0xFF);
-    
-        //This unpacks the last byte and tells the loop below how many times to repeat the RGB values above
-        uint8_t count = pix & 0xFF;
-    
-        //This then draws those RGB values 'count' times.
-        for(int k = 0; k <= count; k++){
-    
-          //To get which x position in the image, we use an modulo operation which binds x between 0 and the image width. When x exceeds image width, it sets back to 0 and we increment y
-          int x = (pixel_index % Width);
-          //To get the y position in the image, we perform integer division of the pixel's index by the width. Integer divison floors the resultant value which only increments for multiples of imgWidth.
-          int y = floor(pixel_index / Width);
-          //We then increment our pixel counter
-          pixel_index++;
-          //This then draws the image to the buffer
-          display.drawPixelRGB888(x + offset_x, y + offset_y, r, g, b);
-    
-          //If mirroring was enabled, draw the image on the other side of the display mirrored
-          if(mirror){
-            display.drawPixelRGB888(offset_x + Width*2 - x - 1, y + offset_y, r, g, b);
-          }
-        };
-      };
-
-      //Update the offset counter for the next frame
-      offset+=frameDataSize+1;
-
-      // Show the frame buffer
-      display.showBuffer();
-      delay(frameDuration);
-    };
-  }
-  
-  //This refreshes the display every 1ms to the currently selected frame buffer
-  void Task2code( void * pvParameters ) {  
-    for (;;) {
-      delay(1);
-      display.display(display_draw_time);
+  for (int i = 0; i < numFrames; i++) {
+    // Clear the back buffer if overlay is disabled
+    if (!overlay) {
+      display->clearScreen();
     }
+
+    // Unpack Frame Metadata
+    uint32_t frameMetaData = aniArray[offset];
+    uint32_t frameDataSize = (frameMetaData >> 20 & 0xFFF);
+    uint32_t frameDuration = (frameMetaData & 0xFFFFF);
+
+    // Decode & Draw Frame RLE Chunks
+    int pixel_index = 0;
+    for (int j = 0; j < frameDataSize; j++) {
+      // Select current RLE chunk (offset + 1 skips the frame metadata word)
+      uint32_t pix = aniArray[j + offset + 1];
+
+      // Unpack RGB values (first 3 bytes) and repeat count (last byte)
+      uint8_t r     = (pix >> 24 & 0xFF);
+      uint8_t g     = (pix >> 16 & 0xFF);
+      uint8_t b     = (pix >> 8  & 0xFF);
+      uint8_t count = pix & 0xFF;
+
+      // Draw the pixel `count + 1` times sequentially
+      for (int k = 0; k <= count; k++) {
+        // Modulo binds x to [0, Width - 1]; integer division advances y every `Width` pixels
+        int x = pixel_index % Width;
+        int y = pixel_index / Width;
+        pixel_index++;
+
+        display->drawPixelRGB888(x + offset_x, y + offset_y, r, g, b);
+
+        if (mirror) {
+          display->drawPixelRGB888(offset_x + Width * 2 - x - 1, y + offset_y, r, g, b);
+        }
+      }
+    }
+
+    // Advance to Next Frame & Display
+    offset += frameDataSize + 1;
+
+    display->flipDMABuffer();
+    delay(frameDuration);
   }
+}

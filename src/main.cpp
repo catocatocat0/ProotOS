@@ -1,265 +1,283 @@
-/*NOTE: BEFORE USING --------------------------------------------------------
+/* ============================================================================
+ * PROOTOS - ESP32 PROTOGEN MATRIX CONTROLLER
+ * ============================================================================
+ * NOTE BEFORE USING:
+ * - Use VSCode and PlatformIO to flash the ESP32. Make sure to change
+ *   platformio.ini configs to match the specific board you are using.
+ * - Tested on a FireBeetle ESP32-E and a standard ESP32 devboard.
+ * - Reference wiring guide: https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA
+ *   (Note: This code uses a modified wiring scheme—check pin mappings in drawfaces.h!)
+ *
+ * Based on: https://github.com/PanickingLynx/ProtOpenSource
+ * Author:   Katxe
+ * Telegram: @Katxe
+ * Bsky:     @katxe.bsky.social
+ * ============================================================================ */
 
-Use VSCode and platformio to flash the ESP32. Make sure to change platformio.ini configs to the specific boards you are using.
-This code has been tested on a FireBeetle ESP32-2 and a standard ESP32 devboard. 
+// ============================================================================
+// DISPLAY & PROJECT DEPENDENCIES
+// ============================================================================
 
-Wire your board as follows from this github: https://github.com/2dom/PxMatrix.
-
-Based on https://github.com/PanickingLynx/ProtOpenSource 
-The code uses a modified wiring scheme, make sure to read which pins go where in drawfaces.h!
-By Katxe
-Telegram: @Katxe
-Bsky: @katxe.bsky.social
-*/
-
-//Uncomment this if your matrices are displaying errors like color shifts or flickering pixels (Mostly the case with matrices bought from AliExpress)
+// Uncomment this if your matrices display errors like color shifts or flickering pixels
+// (Common with matrices bought from AliExpress)
 #define PxMATRIX_SPI_FREQUENCY 19900000
 
-//This sets double buffering to be true. It allows for us to change images on the matrix seamlessly
+// Enables double buffering for seamless image transitions on the matrix
 #define double_buffer true
 
-//Include Project dependencies
 #include <Arduino.h>
-
-//load function libraries (to organize better and reduce clutter)
 #include "functions/misc.h"
 #include "functions/drawfaces.h"
+#include "functions/faces.h"
 
-//Loads in the bluetooth module
-//#include "bt/bluetooth.h"
-//uncomment this when reimplementing bluetooth
+// Bluetooth module (WIP - uncomment when reimplementing Bluetooth)
+// #include "bt/bluetooth.h"
 
-#define MIC_PIN 25 //Connect the OUT pin on the MAX4466 onto this pin.
-#define BOOP_PIN 33 //This pin is used to detect booping and confirm bluetooth pairing. Connect it to a positive output of your sensor relative to ground.
-#define FACE_SELECTOR 32 //This pin cycles through the protogen emotions, wire a button connected to 3.3v for this pin. 
 
-//These are our function predefines 
-void isSpeaking(uint8_t picker); 
+// ============================================================================
+// HARDWARE PIN DEFINITIONS
+// ============================================================================
+
+#define MIC_PIN       35  // Connect the OUT pin of the MAX4466 microphone here
+#define BOOP_PIN      33  // Detects booping & confirms BT pairing (connect sensor positive output relative to GND)
+#define FACE_SELECTOR 32  // Cycles through protogen emotions (wire a button connected to 3.3V)
+
+
+// ============================================================================
+// MICROPHONE & TIMING CONFIGURATION
+// ============================================================================
+
+// Baseline analog reading from the microphone in a quiet environment.
+// To calibrate: temporarily set this to 0, print `microphoneLevel` to Serial,
+// and observe the resting value on the Serial Plotter with no sound.
+const int baseline = 1945;
+
+// Default frame delay (in ms) used when holding static sprites in `holdFace()`
+const int defaultFaceDelay = 100;
+
+
+// ============================================================================
+// STATE & TIMING VARIABLES
+// ============================================================================
+
+unsigned long previousMillis;
+unsigned long blinkMillis;
+unsigned long currentMillis = millis();
+unsigned long prevButton    = 0; // Used to debounce the face selector button
+
+uint8_t currFace   = 1;                // Currently active face index in `faceSelector[]` (1-indexed)
+Face    activeFace = faceSelector[0];  // Cached active Face struct (only updated when `selectFaceISR` triggers)
+bool    booped     = false;            // Flag set by boopISR when the boop sensor triggers
+
+
+// ============================================================================
+// FUNCTION PREDEFINES
+// ============================================================================
+
+void isSpeaking(const uint32_t* speakSprite);
 void isIdle();
-void Task2code( void * pvParameters );
+void holdFace(int time, int offset_x, int offset_y, const uint32_t image[], bool overlay, bool mirror, FaceModifier* modifier);
 void IRAM_ATTR boopISR();
 void IRAM_ATTR selectFaceISR();
 
-//Predefining up task variables for dual core operation.
-TaskHandle_t Task1; 
-TaskHandle_t Task2;
 
-//These variables keep track of time for the facial animation loop
-unsigned long previousMillis; 
-unsigned long blinkMillis;
-unsigned long currentMillis = millis();
+// ============================================================================
+// SETUP & MAIN LOOP
+// ============================================================================
 
-//This defines the list of facial expressions for your protogen
-const uint32_t* faceSelector[] = {
-  normal
-};
+void setup() {
+  // Initialize Bluetooth (WIP)
+  // setupBluetooth();
 
-//When you add faces to faceSelector, make sure to change this number to how many faces you put in
-uint8_t numFaces = 1; 
+  // Initialize the initial face's sprite pool counts once at startup
+  activeFace.initCounts();
 
-//Face selector
-uint8_t currFace = 1;
+  // Initialize the LED matrix display and boot screen
+  startUP();
 
-//This defines the pointer array to our facial animations which will be used in getMicrophoneLevel()
-//With this current setup, index 0-4 is for talking, 0-9 is for loud talking and 10-14 is for yell
-const uint32_t* talkSelector[] = {
-  talk1, talk2, talk3, talk4, talk5,
-  loud1, loud2, loud3, loud4, loud5,
-  yell1, yell2, yell3, yell4, yell5
-};
-
-//These are the activation thresholds for the talking animations to play. You will most likely need to change these values depending on mic position, manufacturer, etc.
-//To change, I recommend using Serial.println(microphoneLevel) and viewing the serial plotter.
-const int talk_threshold = 300;
-const int loud_threshhold = 600;
-const int yelling_threshhold = 1500;
-
-//This is the baseline signal you get from your microphone with no sound. You will have to measure this by setting it to 0 and using Serial.println(microphoneLevel) and viewing what value shows up on the serial plotter with no sound.
-const int baseline = 1945; 
-uint8_t facePicker = 0;
-
-//This variable keeps track of whether or not the protogen is booped
-bool booped = false;
-
-//Code in setup only runs once
-void setup(){
-  //This sets up our mic pin
+  // Configure microphone input
   pinMode(MIC_PIN, INPUT);
 
-  //This sets up our interrupt functions
-  pinMode(BOOP_PIN, INPUT_PULLUP);
+  // Configure hardware interrupts for boop sensor and face selector button
+  pinMode(BOOP_PIN, INPUT_PULLDOWN);
   attachInterrupt(BOOP_PIN, boopISR, RISING);
+
+  pinMode(FACE_SELECTOR, INPUT_PULLDOWN);
   attachInterrupt(FACE_SELECTOR, selectFaceISR, FALLING);
-
-  //This sets up bluetooth. *WIP*
-  //setupBluetooth();
-
-  //This sets up dual core processing. The 2nd core is required to constantly refresh the display with values from the video buffer
-  xTaskCreatePinnedToCore(
-    Task2code,    // Task function.
-    "Task2",      // name of task.
-    11000,        //Stack size of task
-    NULL,         // parameter of the task
-    24,           // priority of the task
-    &Task2,       // Task handle to keep track of created task
-    0             // pin task to core 1
-  );
-
-  //Run all the start up commands to initialize the display
-  startUP();
 }
 
-//This is our main loop
-void loop(){
-
-  if(booped){
-    //Turn off booping. This is also added in each case switch argument to disable boop buffering if someone boops you twice in a row
+void loop() {
+  // Handle Boop Sensor Trigger
+  if (booped) {
+    // Reset flag immediately (and after animations) to prevent buffering multiple boops
     booped = false;
 
-    //We use a switch case to play the animation depending on which integer rand selects.
-    //If you add more animations, be sure to increase the upper value for rand.
-    int rand = random(0,4);
-    switch(rand){
-        case 0:
-          holdFace(5000, 0, 0, bsod, false, false);
-          booped = false;
-          break;
-        case 1:
-          playAnimation(0, 0, bk1_, false, true);
-          booped = false;
-          break;
-        case 2:
-          playAnimation(0, 0, bk2_, true, true);
-          booped = false;
-          break;
-        case 3:
-          holdFace(2500, 0, 0, amogus, false, true, abberation);
-          booped = false;
-          break;
-      }
+    // Pick a random boop reaction animation.
+    // NOTE: Increase the upper bound of random() if you add more cases.
+    int rand = random(0, 4);
+    switch (rand) {
+      case 0:
+        playAnimation(0, 0, bk, true, true);
+        booped = false;
+        break;
+
+      case 1:
+        playAnimation(0, 0, bk1_, false, true);
+        booped = false;
+        break;
+
+      case 2:
+        playAnimation(0, 0, bk2_, true, true);
+        booped = false;
+        break;
+
+      case 3:
+        holdFace(2500, 0, 0, amogus, false, true, abberation);
+        booped = false;
+        break;
+
+      case 4:
+        holdFace(2500, 0, 0, bsod, false, true, abberation);
+        booped = false;
+        break;
+    }
   }
 
-  //This reads from the mic pin and substract the baseline to end up with the sound's waveform.
-  //Because we only care about loudness for selecting which speaking animation to play, we absolute value the baseline
-  //Then, we apply a rolling average to the signal as a low-pass filter
-  int microphoneLevel = rollingAverage(abs(analogRead(MIC_PIN)- baseline)); //Read pin value
-      
-  //Depending on how large the mic signal is, it picks a facial animation to play for the given loudness range.
-  //Make sure to order the if else statements from largest to smallest or else it'll just play only the smallest value
-  if(microphoneLevel > yelling_threshhold){
-    facePicker = random(10,15);
-  }else if(microphoneLevel > loud_threshhold){
-    facePicker = random(5,10);
-  }else if(microphoneLevel > talk_threshold){
-    facePicker = random(0,5);
-  }
+  // Read & Filter Microphone Input
+  // Subtract baseline to center the waveform, take the absolute amplitude for loudness,
+  // and pass it through a rolling average (low-pass filter) to smooth spikes.
+  int microphoneLevel = rollingAverage(abs(analogRead(MIC_PIN) - baseline));
 
-  //If the mic signal is greater than the talking threshold, it then uses the face picked by the code above to play the speaking animation.
-  //If it's less than the talking threshold, it plays the idle face animation.
-  if (microphoneLevel > talk_threshold){
-    isSpeaking(facePicker);
-  }else{ 
+  // Update Facial Animation (Speaking vs. Idle) using cached `activeFace`
+  if (activeFace.canTalk && microphoneLevel > activeFace.talkThreshold) {
+    const uint32_t* speakSprite = nullptr;
+
+    // Select speaking animation tier from loudest to quietest
+    if (microphoneLevel > activeFace.yellThreshold) {
+      speakSprite = activeFace.yell();
+    } else if (microphoneLevel > activeFace.loudThreshold) {
+      speakSprite = activeFace.loud();
+    } else {
+      speakSprite = activeFace.talk();
+    }
+
+    isSpeaking(speakSprite);
+  } else {
     isIdle();
   }
 
-/* BLUETOOTH ***WIP***
-  //This runs our bluetooth loop and returns a code
+  /* Bluetooth Loop (WIP - TODO: Add in Bluetooth)
   uint8_t btMessage = btServerLoop();
-
-  //This handles bluetooth related functions
-    switch(btMessage){  
-      
-      //Code 0, run normally
-      case 0:
-        if(!boopSensor()){
-          getMicrophoneLevel();
-        }
+  switch (btMessage) {
+    case 0: // Run normally
+      if (!boopSensor()) {
+        getMicrophoneLevel();
+      }
       break;
-      
-      //Code 1, play bluetooth display image
-      case 1:
 
+    case 1: // Play Bluetooth display image
       break;
   }
   */
 }
 
-//Boop sensor interrupt, when the boop sensor pin gets pulled to HIGH, it'll interrupt the facial animations and play a boop animation
-void IRAM_ATTR boopISR(){
+
+// ============================================================================
+// DISPLAY & ANIMATION HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Plays a speaking animation frame for a short random duration (10–200ms),
+ * interjecting the active face's blink animation every 5000–10000ms (if `blinkSprite` is set).
+ *
+ * @param speakSprite  Pointer to the RLE sprite selected from the face's talk/loud/yell pool
+ */
+void isSpeaking(const uint32_t* speakSprite) {
+  previousMillis = currentMillis;
+
+  while (currentMillis - previousMillis <= random(10, 200)) {
+    if (activeFace.blinkSprite != nullptr && currentMillis - blinkMillis >= random(5000, 10000)) {
+      holdFace(100, 0, 0, activeFace.blinkSprite, true, true, activeFace.modifier);
+      blinkMillis = currentMillis;
+    } else {
+      drawFace(0, 0, speakSprite, true, true, activeFace.modifier);
+    }
+
+    delay(activeFace.faceDelay);
+    currentMillis = millis();
+  }
+}
+
+/**
+ * Plays the currently active idle face for a short random duration (10–200ms),
+ * interjecting the face's blink animation every 2000–10000ms (if `blinkSprite` is set).
+ */
+void isIdle() {
+  previousMillis = currentMillis;
+
+  while (currentMillis - previousMillis <= random(10, 200)) {
+    if (activeFace.blinkSprite != nullptr && currentMillis - blinkMillis >= random(2000, 10000)) {
+      holdFace(100, 0, 0, activeFace.blinkSprite, true, true, activeFace.modifier);
+      blinkMillis = currentMillis;
+    } else {
+      drawFace(0, 0, activeFace.idleSprite, true, true, activeFace.modifier);
+    }
+
+    delay(activeFace.faceDelay);
+    currentMillis = millis();
+  }
+}
+
+/**
+ * Holds a static RLE-encoded sprite (generated by convimg.py) on the screen
+ * for a specified duration.
+ *
+ * @param time      Duration to hold the image (in milliseconds)
+ * @param offset_x  Horizontal pixel offset
+ * @param offset_y  Vertical pixel offset
+ * @param image     RLE-encoded sprite array (first 3 entries: width, height, array size;
+ *                  subsequent entries: 3 bytes RGB + 1 byte repeat count)
+ * @param overlay   If false, clears the display before drawing (allows layering when true)
+ * @param mirror    If true, mirrors the sprite across the second panel
+ * @param modifier  Optional post-processing effect (e.g., aberration, CRT)
+ */
+void holdFace(int time, int offset_x, int offset_y, const uint32_t image[], bool overlay, bool mirror, FaceModifier* modifier) {
+  previousMillis = currentMillis;
+
+  while (currentMillis - previousMillis <= time) {
+    drawFace(offset_x, offset_y, image, overlay, mirror, modifier);
+    delay(defaultFaceDelay);
+    currentMillis = millis();
+  }
+}
+
+
+// ============================================================================
+// INTERRUPT SERVICE ROUTINES (ISRs)
+// ============================================================================
+
+/**
+ * Triggered when BOOP_PIN goes HIGH. Flags the main loop to play a boop animation.
+ */
+void IRAM_ATTR boopISR() {
   booped = true;
 }
 
-//This interrupt allows us to cycle through facial expressions.
-//We define prevButton for debouncing the signal.
-unsigned long prevButton = 0;
-void IRAM_ATTR selectFaceISR(){
-  if (millis() - prevButton > 250){
-
-    if(currFace > numFaces){
+/**
+ * Triggered when FACE_SELECTOR button is pressed. Cycles through `faceSelector[]`
+ * with a 250ms debounce window, updates `activeFace`, and recalculates its pool counts.
+ */
+void IRAM_ATTR selectFaceISR() {
+  if (millis() - prevButton > 250) {
+    if (currFace >= numFaces) {
       currFace = 1;
-    }else{
+    } else {
       currFace++;
-    };
+    }
+
+    activeFace = faceSelector[currFace - 1];
+    activeFace.initCounts();
 
     prevButton = millis();
-  };
-}
-
-//This function plays the speaking animations.
-//When it selects the face, it keeps playing it for 110-200ms. Every 5000-1000ms, it plays a blink animation.
-//picker - which face to select from our talkSelector[] array
-void isSpeaking(uint8_t picker){
-  // Open mouth normally
-  display.clearDisplay();
-  previousMillis = currentMillis;
-  while (currentMillis - previousMillis <= random(10,200)){
-    if(currentMillis - blinkMillis >= random(5000, 10000)){
-      holdFace(100, 0, 0, blink, true, true, abberation);
-      blinkMillis = currentMillis;
-    }else{
-        drawFace(0, 0, talkSelector[picker], true, true, abberation);
-    }
-    
-    delay(100);
-    currentMillis = millis();
   }
 }
-
-//This displays our idle animation for when no speaking is detected. Works the same way as isSpeaking() with the talk selector replaced with face selector.
-void isIdle(){
-  display.clearDisplay();
-  previousMillis = currentMillis;
-  while (currentMillis - previousMillis <= random(10,200)){
-    
-    if(currentMillis - blinkMillis >= random(2000, 10000)){
-      holdFace(100, 0, 0, blink, true, true, abberation);
-      blinkMillis = currentMillis;
-    }else{
-        drawFace(0, 0, faceSelector[currFace - 1], true, true, abberation);
-    }
-
-    delay(100);
-    currentMillis = millis();
-  }
-}
-
-//This function holds an image on the secreen for a given number of milliseconds.
-//This function draws images generated by convimg.py in FacialSprites.
-//time - the length of time to hold the image for
-//offset_x - The x offset for the image
-//offset_y - The y offset for the image
-//image[] - The image to draw on the screen. The first 3 entries are width, height and array size. The images are encoded using run length encodinbg (RLE) and are formatted as follows: first 3 bytes are RGB, last byte is how many times to repeat.
-//overlay - This function uses a double buffer for seamless transitions. Setting to false will cause the display not to switch buffers, letting you overlay images on top of eachother.
-//mirror - This mirrors the image if set to true
-//modifier - this parameter sets what modidifier to perform on the image before displaying it
-void holdFace(int time, int offset_x, int offset_y, const uint32_t image[], bool overlay, bool mirror, FaceModifier* modifier){
-  display.clearDisplay();
-  previousMillis = currentMillis;
-  while (currentMillis - previousMillis <= time){
-    drawFace(offset_x, offset_y, image, overlay, mirror, modifier);
-    delay(100);
-    currentMillis = millis();
-  }
-}
-
-//TODO: ADD IN BLUETOOTH

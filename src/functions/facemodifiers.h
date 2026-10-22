@@ -1,113 +1,128 @@
+/* ============================================================================
+ * FACIAL POST-PROCESSING EFFECT MODIFIERS
+ * ============================================================================
+ * Defines the base `FaceModifier` interface and visual effect implementations
+ * (such as Chromatic Aberration and CRT scanlines) applied in `drawFace()`.
+ * ============================================================================ */
+
+#pragma once
+
 #include <Arduino.h>
 
-//Base class for defining special effects (modifiers) for the drawFace function
-//The process() function modifies the current entry in pixelBuffer which is then displayed by drawFace(). This is done by splitting up the pixelBuffer value into its RGB components, modifying the values, and then repacking it as so:
-//the frameComplete function runs after a single frame is finished and likewise, frameBegin is what to do when a frame starts.
+// ============================================================================
+// BASE MODIFIER INTERFACE
+// ============================================================================
+
+/**
+ * Base class for defining post-processing special effects for `drawFace()`.
+ *
+ * - `frameBegin()`    runs once before pixels in a frame are drawn.
+ * - `process()`       transforms the current RGB565 pixel in `pixelBuffer` before drawing.
+ * - `frameComplete()` runs once after the entire frame has been drawn.
+ */
 class FaceModifier {
 public:
-    virtual ~FaceModifier() = default;
-    virtual void frameBegin(uint32_t* pixelBuffer, int imgWidth, int imgHeight) {}
-    virtual uint32_t process(int index, uint32_t* pixelBuffer, int imgWidth, int imgHeight) = 0;
-    virtual void frameComplete(uint32_t* pixelBuffer, int imgWidth, int imgHeight) {}
+  virtual ~FaceModifier() = default;
+  virtual void frameBegin(uint16_t* pixelBuffer, int imgWidth, int imgHeight) {}
+  virtual uint16_t process(int index, uint16_t* pixelBuffer, int imgWidth, int imgHeight) = 0;
+  virtual void frameComplete(uint16_t* pixelBuffer, int imgWidth, int imgHeight) {}
 };
 
-//Chromatic abberation modifier
+
+// ============================================================================
+// CHROMATIC ABERRATION MODIFIER
+// ============================================================================
+
+/**
+ * Randomly shifts the Red, Green, and Blue channels by -1 to +1 pixels
+ * on each frame to create a glitchy chromatic aberration effect.
+ */
 class AberrationModifier : public FaceModifier {
 public:
-    int redOffsetX, redOffsetY, greenOffsetX, greenOffsetY, blueOffsetX, blueOffsetY;
-    AberrationModifier():redOffsetX(random(-1,2)), 
-                        redOffsetY(random(-1,2)), 
-                        greenOffsetX(random(-1,2)), 
-                        greenOffsetY(random(-1,2)), 
-                        blueOffsetX(random(-1,2)), 
-                        blueOffsetY(random(-1,2)){
-    };
+  int redOffsetX,   redOffsetY;
+  int greenOffsetX, greenOffsetY;
+  int blueOffsetX,  blueOffsetY;
 
-    void frameBegin(uint32_t* pixelBuffer, int imgWidth, int imgHeight) override {  
-        //Calculate the offset for each channel and direction
-        redOffsetX = random(-1, 2); 
-        redOffsetY = random(-1, 2);
-        greenOffsetX = random(-1, 2);
-        greenOffsetY = random(-1, 2);
-        blueOffsetX = random(-1, 2);
-        blueOffsetY = random(-1, 2);
-    }
+  AberrationModifier()
+    : redOffsetX(random(-1, 2)),
+      redOffsetY(random(-1, 2)),
+      greenOffsetX(random(-1, 2)),
+      greenOffsetY(random(-1, 2)),
+      blueOffsetX(random(-1, 2)),
+      blueOffsetY(random(-1, 2)) {}
 
-    uint32_t process(int index, uint32_t* pixelBuffer, int imgWidth, int imgHeight) override {
-        int x = index % imgWidth;
-        int y = index / imgWidth;
+  void frameBegin(uint16_t* pixelBuffer, int imgWidth, int imgHeight) override {
+    // Randomize RGB channel offsets at the start of each frame
+    redOffsetX   = random(-1, 2);
+    redOffsetY   = random(-1, 2);
+    greenOffsetX = random(-1, 2);
+    greenOffsetY = random(-1, 2);
+    blueOffsetX  = random(-1, 2);
+    blueOffsetY  = random(-1, 2);
+  }
 
-        //Calculate the position of the shifted pixels
-        int redX = x + redOffsetX;
-        int redY = y + redOffsetY;
-        int greenX = x + greenOffsetX;
-        int greenY = y + greenOffsetY;
-        int blueX = x + blueOffsetX;
-        int blueY = y + blueOffsetY;
+  uint16_t process(int index, uint16_t* pixelBuffer, int imgWidth, int imgHeight) override {
+    int x = index % imgWidth;
+    int y = index / imgWidth;
 
-        //Use the constrain function to make sure that the pixel locations are within bound
-        redX = constrain(redX, 0, imgWidth - 1);
-        redY = constrain(redY, 0, imgHeight - 1);
-        greenX = constrain(greenX, 0, imgWidth - 1);
-        greenY = constrain(greenY, 0, imgHeight - 1);
-        blueX = constrain(blueX, 0, imgWidth - 1);
-        blueY = constrain(blueY, 0, imgHeight - 1);
+    // Calculate shifted coordinates for each color channel, constrained to image bounds
+    int redX   = constrain(x + redOffsetX,   0, imgWidth  - 1);
+    int redY   = constrain(y + redOffsetY,   0, imgHeight - 1);
+    int greenX = constrain(x + greenOffsetX, 0, imgWidth  - 1);
+    int greenY = constrain(y + greenOffsetY, 0, imgHeight - 1);
+    int blueX  = constrain(x + blueOffsetX,  0, imgWidth  - 1);
+    int blueY  = constrain(y + blueOffsetY,  0, imgHeight - 1);
 
-        //Find the pixel which corresponds to each shift
-        uint32_t redPixel = pixelBuffer[redY * imgWidth + redX];
-        uint32_t greenPixel = pixelBuffer[greenY * imgWidth + greenX];
-        uint32_t bluePixel = pixelBuffer[blueY * imgWidth + blueX];
+    // Sample the RGB565 pixel corresponding to each shifted channel
+    uint16_t redPixel   = pixelBuffer[redY   * imgWidth + redX];
+    uint16_t greenPixel = pixelBuffer[greenY * imgWidth + greenX];
+    uint16_t bluePixel  = pixelBuffer[blueY  * imgWidth + blueX];
 
-        //Isolate the individual color values
-        uint8_t r = (redPixel >> 24) & 0xFF;  
-        uint8_t g = (greenPixel  >> 16) & 0xFF;
-        uint8_t b = (bluePixel >> 8) & 0xFF;
+    // Combine 5-bit Red (0xF800), 6-bit Green (0x07E0), and 5-bit Blue (0x001F) directly
+    return (redPixel & 0xF800) | (greenPixel & 0x07E0) | (bluePixel & 0x001F);
+  }
 
-        //We return our modified value
-        return static_cast<uint32_t>((r << 24) | (g << 16) | (b << 8) & 0xFFFFFFFF);
-    }
-
-    void frameComplete(uint32_t* pixelBuffer, int imgWidth, int imgHeight) override {
-    }
+  void frameComplete(uint16_t* pixelBuffer, int imgWidth, int imgHeight) override {}
 };
 
-//CRT modifier
+
+// ============================================================================
+// CRT SCANLINE MODIFIER
+// ============================================================================
+
+/**
+ * Simulates a scrolling CRT scanline gradient across the matrix height.
+ */
 class CRTModifier : public FaceModifier {
 public:
-    int scanLineOffset;
+  int scanLineOffset;
 
-    CRTModifier(){
-        scanLineOffset = 0;
+  CRTModifier() : scanLineOffset(0) {}
+
+  uint16_t process(int index, uint16_t* pixelBuffer, int imgWidth, int imgHeight) override {
+    int y = index / imgWidth;
+
+    int displayY = y;
+    int distance = (displayY - scanLineOffset + imgHeight) % imgHeight;
+
+    // Generate a 5-pixel-high brightness gradient starting at 85% intensity
+    // and stepping down by 15% per row
+    if (distance < 5) {
+      float    intensity = 0.85f - distance * 0.15f;
+      uint16_t pix       = pixelBuffer[index];
+
+      uint16_t r = static_cast<uint16_t>(((pix >> 11) & 0x1F) * intensity);
+      uint16_t g = static_cast<uint16_t>(((pix >> 5)  & 0x3F) * intensity);
+      uint16_t b = static_cast<uint16_t>((pix         & 0x1F) * intensity);
+
+      return (r << 11) | (g << 5) | b;
     }
 
-    uint32_t process(int index, uint32_t* pixelBuffer, int imgWidth, int imgHeight) override {
-        int x = index % imgWidth;
-        int y = index / imgWidth;
+    return pixelBuffer[index];
+  }
 
-        int displayY = y;
-        int distance = (displayY - scanLineOffset + imgHeight) % imgHeight;
-        
-        //Starting from 0.85 brightness, we generate a gradient that is 5 pixels high and changes 0.15 in brightness the further down we go
-        if(distance < 5) {
-            float intensity = 0.85f - distance * 0.15f;
-            uint32_t pix = pixelBuffer[index];
-            uint8_t r = (pix >> 24) & 0xFF;
-            uint8_t g = (pix >> 16) & 0xFF;
-            uint8_t b = (pix >> 8) & 0xFF;
-
-            r = static_cast<uint8_t>(r * intensity);
-            g = static_cast<uint8_t>(g * intensity);
-            b = static_cast<uint8_t>(b * intensity);
-
-            //We return our modified value
-            return static_cast<uint32_t>((r << 24) | (g << 16) | (b << 8) & 0xFFFFFFFF);
-        }
-
-        return pixelBuffer[index];
-    }
-
-    //Update where to move the gradient whenver the frame ends
-    void frameComplete(uint32_t* pixelBuffer, int imgWidth, int imgHeight) override {
-        scanLineOffset = (scanLineOffset + 1) % imgHeight;
-    }
+  void frameComplete(uint16_t* pixelBuffer, int imgWidth, int imgHeight) override {
+    // Advance the scanline gradient vertically after each completed frame
+    scanLineOffset = (scanLineOffset + 1) % imgHeight;
+  }
 };

@@ -19,7 +19,7 @@ if __name__ == '__main__':
         
         print("Encoding: "+filename.split(".")[1].split("\\")[-1])    
         for idx, frame in enumerate(ImageSequence.Iterator(image)):
-            if name == "apple" and not idx % 10 == 0:
+            if name == "apple" and not idx % 2 == 0:
                 continue
             unencoded_data = []
             frame_times+=str(frame.info['duration'])+","
