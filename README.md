@@ -5,6 +5,13 @@ Based on [PanickingLynx's ProtOpenSource](https://github.com/PanickingLynx/ProtO
 
 - **Author:** Katxe (Telegram: `@Katxe` | Bluesky: `@katxe.bsky.social`)
 
+## Features
+- Microphone animations
+- Boop sensor capabilities
+- Different facial expression selection
+- Animations are hand drawn frames from .png file, the library lets you convert them into protogen displays
+- Super easy to set up custom animations and boop reactions
+
 ## Software Setup
 
 You will need Python, PlatformIO and your IDE of choice to use this library (I recommend VSCode).
