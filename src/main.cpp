@@ -61,7 +61,6 @@ const int defaultFaceDelay = 100;
 // STATE & TIMING VARIABLES
 // ============================================================================
 
-unsigned long currentMillis     = 0;
 unsigned long lastDrawMillis    = 0;    // Timestamp of the last frame redraw (`faceDelay`)
 unsigned long lastMouthMillis   = 0;    // Timestamp when the current speaking sprite was chosen
 unsigned long mouthHoldDuration = 0;    // Duration (in ms) to hold the current speaking sprite
@@ -115,8 +114,6 @@ void setup() {
 }
 
 void loop() {
-  currentMillis = millis();
-
   // Handle Boop Sensor Trigger
   if (booped) {
     // Reset flag immediately (and after the animation) to prevent buffering multiple boops
@@ -128,8 +125,7 @@ void loop() {
     }
 
     booped      = false;
-    currentMillis = millis();
-    blinkMillis   = currentMillis;
+    blinkMillis = millis();
   }
 
   // Read & Filter Microphone Input
@@ -140,7 +136,7 @@ void loop() {
   // Update Facial Animation (Speaking vs. Idle) using cached `activeFace`
   if (activeFace.canTalk && microphoneLevel > activeFace.talkThreshold) {
     // Only pick a new random mouth sprite once the previous mouth's hold duration has elapsed
-    if (currentSpeakSprite == nullptr || currentMillis - lastMouthMillis >= mouthHoldDuration) {
+    if (currentSpeakSprite == nullptr || timerDelay(lastMouthMillis, mouthHoldDuration)) {
       if (microphoneLevel > activeFace.yellThreshold) {
         currentSpeakSprite = activeFace.yell();
       } else if (microphoneLevel > activeFace.loudThreshold) {
@@ -149,7 +145,7 @@ void loop() {
         currentSpeakSprite = activeFace.talk();
       }
 
-      lastMouthMillis   = currentMillis;
+      lastMouthMillis   = millis();
       mouthHoldDuration = random(100, 200);
     }
 
@@ -186,15 +182,13 @@ void loop() {
  * @param speakSprite  Pointer to the RLE sprite selected from the face's talk/loud/yell pool
  */
 void isSpeaking(const uint32_t* speakSprite) {
-  if (activeFace.blinkSprite != nullptr && currentMillis - blinkMillis >= nextBlinkInterval) {
+  if (activeFace.blinkSprite != nullptr && timerDelay(blinkMillis, nextBlinkInterval)) {
     activeFace.blink();
-    currentMillis     = millis();
-    blinkMillis       = currentMillis;
-    lastDrawMillis    = currentMillis;
+    blinkMillis       = millis();
+    lastDrawMillis    = blinkMillis;
     nextBlinkInterval = random(5000, 10000);
-  } else if (currentMillis - lastDrawMillis >= (unsigned long)activeFace.faceDelay) {
+  } else if (timerDelay(lastDrawMillis, activeFace.faceDelay)) {
     activeFace.draw(speakSprite);
-    lastDrawMillis = currentMillis;
   }
 }
 
@@ -203,15 +197,13 @@ void isSpeaking(const uint32_t* speakSprite) {
  * interval specified by `activeFace.faceDelay` and triggers a blink every 2000–10000ms.
  */
 void isIdle() {
-  if (activeFace.blinkSprite != nullptr && currentMillis - blinkMillis >= nextBlinkInterval) {
+  if (activeFace.blinkSprite != nullptr && timerDelay(blinkMillis, nextBlinkInterval)) {
     activeFace.blink();
-    currentMillis     = millis();
-    blinkMillis       = currentMillis;
-    lastDrawMillis    = currentMillis;
+    blinkMillis       = millis();
+    lastDrawMillis    = blinkMillis;
     nextBlinkInterval = random(2000, 10000);
-  } else if (currentMillis - lastDrawMillis >= (unsigned long)activeFace.faceDelay) {
+  } else if (timerDelay(lastDrawMillis, activeFace.faceDelay)) {
     activeFace.draw(activeFace.idleSprite);
-    lastDrawMillis = currentMillis;
   }
 }
 
@@ -234,13 +226,13 @@ void holdFace(int time, int offset_x, int offset_y, const uint32_t image[], bool
   }
 
   unsigned long startHoldMillis = millis();
-  unsigned long lastFrameMillis = 0;
+  unsigned long lastFrameMillis = millis();
 
-  while (millis() - startHoldMillis <= (unsigned long)time) {
-    unsigned long now = millis();
-    if (lastFrameMillis == 0 || now - lastFrameMillis >= (unsigned long)defaultFaceDelay) {
+  drawFace(offset_x, offset_y, image, overlay, mirror, modifier);
+
+  while (!timerDelay(startHoldMillis, time)) {
+    if (timerDelay(lastFrameMillis, defaultFaceDelay)) {
       drawFace(offset_x, offset_y, image, overlay, mirror, modifier);
-      lastFrameMillis = now;
     }
   }
 }
@@ -262,7 +254,7 @@ void IRAM_ATTR boopISR() {
  * with a 250ms debounce window, updates `activeFace`, and recalculates its pool counts.
  */
 void IRAM_ATTR selectFaceISR() {
-  if (millis() - prevButton > 250) {
+  if (timerDelay(prevButton, 250)) {
     if (currFace >= numFaces) {
       currFace = 1;
     } else {
@@ -273,7 +265,5 @@ void IRAM_ATTR selectFaceISR() {
       activeFace = *faceSelector[currFace - 1];
       activeFace.initCounts();
     }
-
-    prevButton = millis();
   }
 }
