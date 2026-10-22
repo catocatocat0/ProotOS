@@ -9,7 +9,16 @@
 #pragma once
 
 #include <Arduino.h>
-#include "drawfaces.h"
+#include "../functions/drawfaces.h"
+
+// ============================================================================
+// FACE SELECTOR CONFIGURATION
+// ============================================================================
+
+// Maximum number of facial expressions that can be registered in `faceSelector`.
+// Increase this value if you add more than 10 faces.
+#define MAX_FACES 10
+
 
 // ============================================================================
 // FACE STRUCT DEFINITION
@@ -27,10 +36,17 @@
  *   sprite count automatically detected and cached by `initCounts()`.
  */
 struct Face {
-  // Visual assets & post-processing effect
+  // Visual assets (`drawFace` / `holdFace` image parameters; nullptr-safe)
   const uint32_t* idleSprite;
   const uint32_t* blinkSprite;
-  FaceModifier*   modifier;
+
+  // Display rendering parameters for `drawFace()` and `holdFace()`
+  int           blinkHoldTime; // Duration in ms to hold `blinkSprite` in `holdFace()`
+  int           offsetX;       // Horizontal pixel offset (`offset_x`)
+  int           offsetY;       // Vertical pixel offset (`offset_y`)
+  bool          overlay;       // Frame buffer overlay toggle (`overlay`)
+  bool          mirror;        // Horizontal panel mirroring toggle (`mirror`)
+  FaceModifier* modifier;      // Post-processing effect (`modifier`; nullptr disables effect)
 
   // Frame timing & speaking toggle
   bool canTalk;
@@ -41,10 +57,10 @@ struct Face {
   int loudThreshold;
   int yellThreshold;
 
-  // Speaking animation sprite pools (up to 5 sprites per volume tier)
-  const uint32_t* talkPool[5];
-  const uint32_t* loudPool[5];
-  const uint32_t* yellPool[5];
+  // Speaking animation sprite pools (up to 10 sprites per volume tier)
+  const uint32_t* talkPool[10];
+  const uint32_t* loudPool[10];
+  const uint32_t* yellPool[10];
 
   // Cached pool sizes (automatically populated by `initCounts()`)
   uint8_t talkCount;
@@ -57,17 +73,17 @@ struct Face {
    */
   inline void initCounts() {
     talkCount = 0;
-    while (talkCount < 5 && talkPool[talkCount] != nullptr) {
+    while (talkCount < 10 && talkPool[talkCount] != nullptr) {
       talkCount++;
     }
 
     loudCount = 0;
-    while (loudCount < 5 && loudPool[loudCount] != nullptr) {
+    while (loudCount < 10 && loudPool[loudCount] != nullptr) {
       loudCount++;
     }
 
     yellCount = 0;
-    while (yellCount < 5 && yellPool[yellCount] != nullptr) {
+    while (yellCount < 10 && yellPool[yellCount] != nullptr) {
       yellCount++;
     }
   }
@@ -95,6 +111,26 @@ struct Face {
   inline const uint32_t* yell() const {
     return (yellCount > 0) ? yellPool[random(0, yellCount)] : loud();
   }
+
+  /**
+   * Draws a sprite using this face's configured offsets, overlay, mirror, and modifier.
+   * Safely does nothing if `sprite` is `nullptr`.
+   */
+  inline void draw(const uint32_t* sprite) const {
+    if (sprite != nullptr) {
+      drawFace(offsetX, offsetY, sprite, overlay, mirror, modifier);
+    }
+  }
+
+  /**
+   * Plays the blink animation using `holdFace()` and this face's parameters.
+   * Safely does nothing if `blinkSprite` is `nullptr` or `blinkHoldTime <= 0`.
+   */
+  inline void blink() const {
+    if (blinkSprite != nullptr && blinkHoldTime > 0) {
+      holdFace(blinkHoldTime, offsetX, offsetY, blinkSprite, overlay, mirror, modifier);
+    }
+  }
 };
 
 
@@ -106,6 +142,11 @@ struct Face {
 const Face normalFace = {
   .idleSprite    = normal,
   .blinkSprite   = blink,
+  .blinkHoldTime = 100,
+  .offsetX       = 0,
+  .offsetY       = 0,
+  .overlay       = true,
+  .mirror        = true,
   .modifier      = abberation,
   .canTalk       = true,
   .faceDelay     = 100,
@@ -121,6 +162,11 @@ const Face normalFace = {
 const Face smugFace = {
   .idleSprite    = smug,
   .blinkSprite   = blink,
+  .blinkHoldTime = 100,
+  .offsetX       = 0,
+  .offsetY       = 0,
+  .overlay       = true,
+  .mirror        = true,
   .modifier      = abberation,
   .canTalk       = false,
   .faceDelay     = 100,
@@ -136,6 +182,11 @@ const Face smugFace = {
 const Face normalSilentFace = {
   .idleSprite    = normal,
   .blinkSprite   = blink,
+  .blinkHoldTime = 100,
+  .offsetX       = 0,
+  .offsetY       = 0,
+  .overlay       = true,
+  .mirror        = true,
   .modifier      = abberation,
   .canTalk       = false,
   .faceDelay     = 100,
@@ -149,15 +200,26 @@ const Face normalSilentFace = {
 
 
 // ============================================================================
-// MASTER FACE SELECTOR LIST
+// MASTER FACE SELECTOR LIST & HELPERS
 // ============================================================================
 
-// Add, remove, or reorder faces here. `numFaces` updates automatically!
-const Face faceSelector[] = {
-  normalFace,
-  smugFace,
-  normalSilentFace
+// Add, remove, or reorder `Face` pointers here. Any trailing unfilled slots
+// up to `MAX_FACES` automatically default to `nullptr`.
+const Face* faceSelector[MAX_FACES] = {
+  &normalFace,
+  &smugFace,
+  &normalSilentFace
 };
 
-// Total number of faces in `faceSelector` (computed at compile time)
-const uint8_t numFaces = sizeof(faceSelector) / sizeof(faceSelector[0]);
+uint8_t numFaces = 0; // Total non-null faces in `faceSelector` (set by `initFaceSelector()`)
+
+/**
+ * Counts the non-null `Face` pointers in `faceSelector[]` until it encounters
+ * `nullptr` (or reaches `MAX_FACES`). Called once during `setup()`.
+ */
+inline void initFaceSelector() {
+  numFaces = 0;
+  while (numFaces < MAX_FACES && faceSelector[numFaces] != nullptr) {
+    numFaces++;
+  }
+}

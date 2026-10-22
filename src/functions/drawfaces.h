@@ -218,11 +218,15 @@ void drawFace(int offset_x, int offset_y, const uint32_t image[], bool overlay, 
  * @param mirror     If true, mirrors each frame horizontally across the second panel
  */
 void playAnimation(int offset_x, int offset_y, Animation animation, bool overlay, bool mirror) {
-  uint32_t        numFrames   = animation.numFrames;
-  uint32_t        arrayLength = animation.arrayLength;
-  uint32_t        Width       = animation.Width;
-  uint32_t        Height      = animation.Height;
-  const uint32_t* aniArray    = animation.animation;
+  const uint32_t* aniArray = animation.animation;
+  if (aniArray == nullptr) {
+    return;
+  }
+
+  uint32_t numFrames   = animation.numFrames;
+  uint32_t arrayLength = animation.arrayLength;
+  uint32_t Width       = animation.Width;
+  uint32_t Height      = animation.Height;
 
   // Tracks the starting index of the current frame in `aniArray`
   // (Starts at index 4 because the first 4 entries hold global metadata)
@@ -245,11 +249,9 @@ void playAnimation(int offset_x, int offset_y, Animation animation, bool overlay
       // Select current RLE chunk (offset + 1 skips the frame metadata word)
       uint32_t pix = aniArray[j + offset + 1];
 
-      // Unpack RGB values (first 3 bytes) and repeat count (last byte)
-      uint8_t r     = (pix >> 24 & 0xFF);
-      uint8_t g     = (pix >> 16 & 0xFF);
-      uint8_t b     = (pix >> 8  & 0xFF);
-      uint8_t count = pix & 0xFF;
+      // Unpack 16-bit RGB565 color (bits 23–8) and repeat count (bits 7–0)
+      uint16_t rgb565 = (pix >> 8) & 0xFFFF;
+      uint8_t  count  = pix & 0xFF;
 
       // Draw the pixel `count + 1` times sequentially
       for (int k = 0; k <= count; k++) {
@@ -258,10 +260,10 @@ void playAnimation(int offset_x, int offset_y, Animation animation, bool overlay
         int y = pixel_index / Width;
         pixel_index++;
 
-        display->drawPixelRGB888(x + offset_x, y + offset_y, r, g, b);
+        display->drawPixel(x + offset_x, y + offset_y, rgb565);
 
         if (mirror) {
-          display->drawPixelRGB888(offset_x + Width * 2 - x - 1, y + offset_y, r, g, b);
+          display->drawPixel(offset_x + Width * 2 - x - 1, y + offset_y, rgb565);
         }
       }
     }

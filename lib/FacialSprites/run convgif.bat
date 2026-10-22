@@ -1,2 +1,2 @@
-python3 %cd%\convgif.py
+python %cd%\convgif.py
 PAUSE

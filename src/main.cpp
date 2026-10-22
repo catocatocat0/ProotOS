@@ -28,7 +28,8 @@
 #include <Arduino.h>
 #include "functions/misc.h"
 #include "functions/drawfaces.h"
-#include "functions/faces.h"
+#include "user/faces.h"
+#include "user/boops.h"
 
 // Bluetooth module (WIP - uncomment when reimplementing Bluetooth)
 // #include "bt/bluetooth.h"
@@ -65,9 +66,9 @@ unsigned long blinkMillis;
 unsigned long currentMillis = millis();
 unsigned long prevButton    = 0; // Used to debounce the face selector button
 
-uint8_t currFace   = 1;                // Currently active face index in `faceSelector[]` (1-indexed)
-Face    activeFace = faceSelector[0];  // Cached active Face struct (only updated when `selectFaceISR` triggers)
-bool    booped     = false;            // Flag set by boopISR when the boop sensor triggers
+uint8_t currFace   = 1;                 // Currently active face index in `faceSelector[]` (1-indexed)
+Face    activeFace = *faceSelector[0];  // Cached active Face struct (only updated when `selectFaceISR` triggers)
+bool    booped     = false;             // Flag set by boopISR when the boop sensor triggers
 
 
 // ============================================================================
@@ -89,8 +90,10 @@ void setup() {
   // Initialize Bluetooth (WIP)
   // setupBluetooth();
 
-  // Initialize the initial face's sprite pool counts once at startup
+  // Initialize face selector, initial face sprite pool counts, and boop pool counts once at startup
+  initFaceSelector();
   activeFace.initCounts();
+  initBoopPool();
 
   // Initialize the LED matrix display and boot screen
   startUP();
@@ -109,38 +112,15 @@ void setup() {
 void loop() {
   // Handle Boop Sensor Trigger
   if (booped) {
-    // Reset flag immediately (and after animations) to prevent buffering multiple boops
+    // Reset flag immediately (and after the animation) to prevent buffering multiple boops
     booped = false;
 
-    // Pick a random boop reaction animation.
-    // NOTE: Increase the upper bound of random() if you add more cases.
-    int rand = random(0, 4);
-    switch (rand) {
-      case 0:
-        playAnimation(0, 0, bk, true, true);
-        booped = false;
-        break;
-
-      case 1:
-        playAnimation(0, 0, bk1_, false, true);
-        booped = false;
-        break;
-
-      case 2:
-        playAnimation(0, 0, bk2_, true, true);
-        booped = false;
-        break;
-
-      case 3:
-        holdFace(2500, 0, 0, amogus, false, true, abberation);
-        booped = false;
-        break;
-
-      case 4:
-        holdFace(2500, 0, 0, bsod, false, true, abberation);
-        booped = false;
-        break;
+    const Boop* chosenBoop = pickNextBoop();
+    if (chosenBoop != nullptr) {
+      chosenBoop->play();
     }
+
+    booped = false;
   }
 
   // Read & Filter Microphone Input
@@ -197,10 +177,10 @@ void isSpeaking(const uint32_t* speakSprite) {
 
   while (currentMillis - previousMillis <= random(10, 200)) {
     if (activeFace.blinkSprite != nullptr && currentMillis - blinkMillis >= random(5000, 10000)) {
-      holdFace(100, 0, 0, activeFace.blinkSprite, true, true, activeFace.modifier);
+      activeFace.blink();
       blinkMillis = currentMillis;
     } else {
-      drawFace(0, 0, speakSprite, true, true, activeFace.modifier);
+      activeFace.draw(speakSprite);
     }
 
     delay(activeFace.faceDelay);
@@ -217,10 +197,10 @@ void isIdle() {
 
   while (currentMillis - previousMillis <= random(10, 200)) {
     if (activeFace.blinkSprite != nullptr && currentMillis - blinkMillis >= random(2000, 10000)) {
-      holdFace(100, 0, 0, activeFace.blinkSprite, true, true, activeFace.modifier);
+      activeFace.blink();
       blinkMillis = currentMillis;
     } else {
-      drawFace(0, 0, activeFace.idleSprite, true, true, activeFace.modifier);
+      activeFace.draw(activeFace.idleSprite);
     }
 
     delay(activeFace.faceDelay);
@@ -242,6 +222,10 @@ void isIdle() {
  * @param modifier  Optional post-processing effect (e.g., aberration, CRT)
  */
 void holdFace(int time, int offset_x, int offset_y, const uint32_t image[], bool overlay, bool mirror, FaceModifier* modifier) {
+  if (image == nullptr) {
+    return;
+  }
+
   previousMillis = currentMillis;
 
   while (currentMillis - previousMillis <= time) {
@@ -275,8 +259,10 @@ void IRAM_ATTR selectFaceISR() {
       currFace++;
     }
 
-    activeFace = faceSelector[currFace - 1];
-    activeFace.initCounts();
+    if (faceSelector[currFace - 1] != nullptr) {
+      activeFace = *faceSelector[currFace - 1];
+      activeFace.initCounts();
+    }
 
     prevButton = millis();
   }

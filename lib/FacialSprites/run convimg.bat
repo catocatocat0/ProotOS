@@ -1,2 +1,2 @@
-python3 %cd%\convimg.py
+python %cd%\convimg.py
 PAUSE

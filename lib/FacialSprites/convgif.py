@@ -36,27 +36,28 @@ if __name__ == '__main__':
             for y in range(height):
                 for x in range(width):
                     r, g, b = newframe.getpixel((x, y))
-                    unencoded_data.append([r, g, b])
+                    rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+                    unencoded_data.append(rgb565)
 
             #Encode and compress the data:
             #We use 0xffffffff as a mask for since all these values are signed
-            prevInt = (unencoded_data[0][0] << 24 | unencoded_data[0][1] << 16 | unencoded_data[0][2] << 8) & 0xffffffff
+            prevInt = (unencoded_data[0] << 8) & 0xffffffff
             counter = 0
             integer = 0
             encoded_data = [] 
 
             for item in unencoded_data[1:]:
-                #ENCODING SCHEME: RRRRRRRR GGGGGGGG BBBBBBBB WWWWWWWWW
-                #R - Red (8 bits)
-                #B - Blue (8 bits)
-                #G - Green (8 bits)
+                #ENCODING SCHEME: RRRRR GGGGGG BBBBB WWWWWWWW (RGB565 + 8-bit repeat count)
+                #R - Red (5 bits)
+                #G - Green (6 bits)
+                #B - Blue (5 bits)
                 #W - Number of times to repeat pixel (8 bits)
-                integer = (item[0] << 24 | item[1] << 16 | item[2] << 8) & 0xffffffff
+                integer = (item << 8) & 0xffffffff
                 if prevInt == integer and counter < 255:
                     counter+=1
                     
                 else:
-                    encoded_data.append(prevInt | (counter & 0xffffffff))
+                    encoded_data.append(prevInt | (counter & 0xff))
                     counter = 0
                     print("Encoded uint32: {}".format(bin(encoded_data[-1] & 0xffffffff)))
 
@@ -64,7 +65,7 @@ if __name__ == '__main__':
             frame_count += 1
             
             #appends the last element
-            encoded_data.append(prevInt | (counter & 0xffffffff))
+            encoded_data.append(prevInt | (counter & 0xff))
             array_size = len(encoded_data)
             total_size += array_size
 
