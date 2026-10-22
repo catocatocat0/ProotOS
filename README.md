@@ -185,8 +185,6 @@ const Boop boopBsod = {
 };
 ```
 
-### Registering Your New Boop in `boopPool`
-
 At the bottom of **`src/user/boops.h`**, add your new boop (with `&` in front of its name) to `boopPool`:
 
 ```cpp
