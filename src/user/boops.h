@@ -1,74 +1,47 @@
 /* ============================================================================
- * BOOP REACTION DEFINITIONS & SELECTION POOL
+ * FACIAL EXPRESSION STRUCT & SELECTOR POOLS
  * ============================================================================
- * Defines the `Boop` struct, individual boop reaction configurations (both
- * multi-frame GIF animations and static held sprites), and the non-repeating
- * selection pool (`boopPool`).
+ * Defines the `Face` struct and all configured facial expressions for the
+ * Protogen. Each `Face` bundles its idle sprite, blink sprite, visual effect
+ * modifier, frame timing, microphone thresholds, and speaking sprite pools.
  * ============================================================================ */
 
+#include <Arduino.h>
 #pragma once
 
-#include <Arduino.h>
-#include "../functions/drawfaces.h"
-
-// ============================================================================
-// BOOP POOL CONFIGURATION
-// ============================================================================
-
-// Maximum number of boop reactions that can be registered in `boopPool`.
-// Increase this value if you add more than 255 boop reactions.
-#define MAX_BOOP_ANIMATIONS 255
-
-
-// ============================================================================
-// BOOP STRUCT DEFINITION
-// ============================================================================
-
-/**
- * Represents a single boop reaction animation or static held face.
- *
- * - Set `animation` (e.g., `&bk`) for a multi-frame GIF animation and leave
- *   `staticSprite` as `nullptr`.
- * - Set `staticSprite` (e.g., `amogus`) for a static image held for `holdTime`
- *   milliseconds and leave `animation` as `nullptr`.
- * - Calling `.play()` automatically detects which asset type is configured
- *   and invokes `playAnimation()` or `holdFace()` accordingly.
- */
-struct Boop {
-  // Asset pointers (set one and leave the other as `nullptr`)
-  const Animation* animation;    // GIF animation for `playAnimation()`
-  const uint32_t*  staticSprite; // Static RLE sprite for `holdFace()` / `drawFace()`
-
-  // Display & timing parameters for `playAnimation()`, `holdFace()`, and `drawFace()`
-  int           holdTime; // Duration in ms for `holdFace()` (if <= 0, draws a single frame via `drawFace()`)
-  int           offsetX;  // Horizontal pixel offset (`offset_x`)
-  int           offsetY;  // Vertical pixel offset (`offset_y`)
-  bool          overlay;  // Frame buffer overlay toggle (`overlay`)
-  bool          mirror;   // Horizontal panel mirroring toggle (`mirror`)
-  FaceModifier* modifier; // Post-processing effect (`modifier`; nullptr disables effect)
-
-  /**
-   * Automatically determines whether this boop is a GIF Animation or a static
-   * sprite and plays it on the display using all configured parameters.
-   * Fully nullptr-safe if neither asset pointer (or internal animation data) is set.
-   */
-  inline void play() const {
-    if (animation != nullptr && animation->animation != nullptr) {
-      playAnimation(offsetX, offsetY, *animation, overlay, mirror);
-    } else if (staticSprite != nullptr) {
-      if (holdTime > 0) {
-        holdFace(holdTime, offsetX, offsetY, staticSprite, overlay, mirror, modifier);
-      } else {
-        drawFace(offsetX, offsetY, staticSprite, overlay, mirror, modifier);
-      }
-    }
-  }
-};
+#include "../functions/boops_struct.h"
 
 
 // ============================================================================
 // INDIVIDUAL BOOP CONFIGURATIONS
 // ============================================================================
+
+// ----------------------------------------------------------------------------
+// STEPS TO DEFINING A CUSTOM BOOP ANIMATION
+// ----------------------------------------------------------------------------
+// 1. Run either convgif.py or convimg.py to generate either an animation or static sprite asset from a GIF or PNG file.
+// This step automatically updates and puts the animation/sprite into the code base. It will have the same variable name as its filename
+// 2. Copy and paste the CUSTOM BOOP TEMPLATE down below and fill out the form
+// 3. Add the new boop to the `boopPool[]` array at the bottom of this file. Make sure it is defined as a pointer (e.g. `&boopNewBoop`).
+
+// ----------------------------------------------------------------------------
+// CUSTOM BOOP TEMPLATE
+// ----------------------------------------------------------------------------
+/* 
+const Boop ~Name of the boop variable~ = {
+  .animation    = ~Pointer to the animation sequence (`animation`), make sure to define as &`variable`.
+  Set to nullptr if not used~,
+  .staticSprite = ~Pointer to the static sprite (`staticSprite`), make sure to define as `variable`.
+  Set to nullptr if not used~,
+  .holdTime     = ~Duration in ms for `holdFace()` (if <= 0, draws a single frame via `drawFace()`)~,
+  .offsetX      = ~Horizontal pixel offset (`offset_x`)~,
+  .offsetY      = ~Vertical pixel offset (`offset_y`)~,
+  .overlay      = ~Frame buffer overlay toggle (`overlay`)~,
+  .mirror       = ~Horizontal panel mirroring toggle (`mirror`)~,
+  .modifier     = ~Post-processing effect (`modifier`; nullptr disables effect)~,
+  .poolWeight   = ~How many times this boop animation appears in the selection pool (`poolWeight`)~
+};
+*/
 
 const Boop boopBk = {
   .animation    = &bk,
@@ -78,7 +51,8 @@ const Boop boopBk = {
   .offsetY      = 0,
   .overlay      = true,
   .mirror       = true,
-  .modifier     = nullptr
+  .modifier     = nullptr,
+  .poolWeight   = 1
 };
 
 const Boop boopBk1 = {
@@ -89,7 +63,8 @@ const Boop boopBk1 = {
   .offsetY      = 0,
   .overlay      = false,
   .mirror       = true,
-  .modifier     = nullptr
+  .modifier     = nullptr,
+  .poolWeight   = 1
 };
 
 const Boop boopBk2 = {
@@ -100,7 +75,8 @@ const Boop boopBk2 = {
   .offsetY      = 0,
   .overlay      = true,
   .mirror       = true,
-  .modifier     = nullptr
+  .modifier     = nullptr,
+  .poolWeight   = 1
 };
 
 const Boop boopAmogus = {
@@ -111,7 +87,8 @@ const Boop boopAmogus = {
   .offsetY      = 0,
   .overlay      = false,
   .mirror       = true,
-  .modifier     = abberation
+  .modifier     = abberation,
+  .poolWeight   = 1
 };
 
 const Boop boopBsod = {
@@ -122,12 +99,13 @@ const Boop boopBsod = {
   .offsetY      = 0,
   .overlay      = false,
   .mirror       = true,
-  .modifier     = abberation
+  .modifier     = nullptr,
+  .poolWeight   = 1
 };
 
 
 // ============================================================================
-// MASTER BOOP SELECTION POOL & HELPERS
+// MASTER BOOP SELECTION POOL
 // ============================================================================
 
 // Add or remove `Boop` pointers here. Any trailing unfilled slots up to
@@ -139,44 +117,3 @@ const Boop* boopPool[MAX_BOOP_ANIMATIONS] = {
   &boopAmogus,
   &boopBsod
 };
-
-uint8_t numBoopAnimations = 0; // Total non-null boops in `boopPool` (set by `initBoopPool()`)
-uint8_t boopPoolRemaining = 0; // Remaining unplayed boops in the current cycle
-
-/**
- * Counts the non-null `Boop` pointers in `boopPool[]` until it encounters
- * `nullptr` (or reaches `MAX_BOOP_ANIMATIONS`) and initializes the pool bounds.
- * Called once during `setup()`.
- */
-inline void initBoopPool() {
-  numBoopAnimations = 0;
-  while (numBoopAnimations < MAX_BOOP_ANIMATIONS && boopPool[numBoopAnimations] != nullptr) {
-    numBoopAnimations++;
-  }
-  boopPoolRemaining = numBoopAnimations;
-}
-
-/**
- * Picks a random unplayed `Boop` from the active pool, swaps it to the back so
- * it won't repeat in the same cycle, and automatically resets the pool once all
- * configured boops have been played.
- */
-inline const Boop* pickNextBoop() {
-  if (numBoopAnimations == 0) {
-    return nullptr;
-  }
-
-  if (boopPoolRemaining == 0) {
-    boopPoolRemaining = numBoopAnimations;
-  }
-
-  uint8_t     pickIndex = random(0, boopPoolRemaining);
-  const Boop* chosen    = boopPool[pickIndex];
-
-  boopPoolRemaining--;
-  boopPool[pickIndex]         = boopPool[boopPoolRemaining];
-  boopPool[boopPoolRemaining] = chosen;
-
-  return chosen;
-}
-
