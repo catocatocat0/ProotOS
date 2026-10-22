@@ -37,7 +37,7 @@ const Boop ~Name of the boop variable~ = {
   .offsetX      = ~Horizontal pixel offset (`offset_x`)~,
   .offsetY      = ~Vertical pixel offset (`offset_y`)~,
   .overlay      = ~Frame buffer overlay toggle (`overlay`)~,
-  .mirror       = ~Horizontal panel mirroring toggle (`mirror`)~,
+  .mirror       = TODO, doesn't work currently, supposed to let you overlay on the prev frame,
   .modifier     = ~Post-processing effect (`modifier`; nullptr disables effect)~,
   .poolWeight   = ~How many times this boop animation appears in the selection pool (`poolWeight`)~
 };
