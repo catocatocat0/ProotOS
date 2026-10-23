@@ -99,7 +99,7 @@ All facial sprites and GIF animations live in the **`lib/FacialSprites/`** folde
 ---
 
 ## Facial Expression Selector
-The library includes a multiple All facial expressions are configured in **`src/user/faces.h`**
+All facial expressions are configured in **`src/user/faces.h`**
 
 ### Adding a New Face
 
