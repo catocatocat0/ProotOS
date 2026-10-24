@@ -102,6 +102,9 @@ void setup() {
   // Initialize the LED matrix display and boot screen
   startUP();
 
+  // Probe I2C bus for internal helmet SSD1306 OLED (SDA = 21, SCK = 22) and start Core 0 task if connected
+  setupOLED();
+
   // Configure microphone input
   pinMode(MIC_PIN, INPUT);
 

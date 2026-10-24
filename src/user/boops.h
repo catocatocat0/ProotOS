@@ -43,6 +43,7 @@ const Boop ~Name of the boop variable~ = {
 };
 */
 
+
 const Boop boopBk = {
   .animation    = &bk,
   .staticSprite = nullptr,

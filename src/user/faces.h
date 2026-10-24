@@ -89,6 +89,25 @@ const Face smugFace = {
   .yellPool      = { nullptr }
 };
 
+const Face smugFace2 = {
+  .idleSprite    = smug2,
+  .blinkSprite   = blink,
+  .blinkHoldTime = 100,
+  .offsetX       = 0,
+  .offsetY       = 0,
+  .overlay       = true,
+  .mirror        = true,
+  .modifier      = abberation,
+  .canTalk       = false,
+  .faceDelay     = 100,
+  .talkThreshold = 300,
+  .loudThreshold = 600,
+  .yellThreshold = 1500,
+  .talkPool      = { nullptr },
+  .loudPool      = { nullptr },
+  .yellPool      = { nullptr }
+};
+
 // Silent normal expression (same idle sprite as normalFace, but talking disabled)
 const Face normalSilentFace = {
   .idleSprite    = normal,
@@ -119,5 +138,6 @@ const Face normalSilentFace = {
 const Face* faceSelector[MAX_FACES] = {
   &normalFace,
   &smugFace,
+  &smugFace2,
   &normalSilentFace
 };

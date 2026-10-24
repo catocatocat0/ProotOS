@@ -1,6 +1,6 @@
 # Katxe's ProotOS
  
-A library for driving protogens using a HUB75 style matrix using an ESP32
+A library for driving protogens using a HUB75-style matrix and an ESP32.
 Based on [PanickingLynx's ProtOpenSource](https://github.com/PanickingLynx/ProtOpenSource) and powered by the [ESP32-HUB75-MatrixPanel-DMA](https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA) library.
 
 - **Author:** Katxe (Telegram: `@Katxe` | Bluesky: `@katxe.bsky.social`)
@@ -9,18 +9,19 @@ Based on [PanickingLynx's ProtOpenSource](https://github.com/PanickingLynx/ProtO
 - Microphone animations
 - Boop sensor capabilities
 - Different facial expression selection
-- Animations are hand drawn frames from .png file, the library lets you convert them into protogen displays
+- Optional internal helmet OLED display (`128×32` SSD1306) that mirrors your current face in real time on the ESP32's 2nd core
+- Animations are hand-drawn frames from `.png` or `.gif` files, and the library lets you convert them into protogen displays
 - Super easy to set up custom animations and boop reactions
 
 ## Software Setup
 
 You will need Python, PlatformIO and your IDE of choice to use this library (I recommend VSCode).
 
-### Installing Pythons
-- Python is required for converting .gif and .png files into raw code the program can read
-- Go to [python.org/downloads](https://www.python.org/downloads/) and download the latest version of Python
+### Installing Python
+- Python is required for converting `.gif` and `.png` files into raw code the program can read.
+- Go to [python.org/downloads](https://www.python.org/downloads/) and download the latest version of Python.
 - **IMPORTANT:** On the very first screen of the Python installer, **check the box at the bottom that says `"Add python.exe to PATH"`** before clicking **Install Now**.
-- Once Python finishes installing, open the `lib/FacialSprites` folder inside this project and double-click **`install python dependencies.bat`** (for Windows users only, if on Mac or Linux, you will need to install the Pillow library manually. There should be plenty of tutorials available).
+- Once Python finishes installing, open the `lib/FacialSprites` folder inside this project and double-click **`install python dependencies.bat`** (for Windows users only; if on Mac or Linux, you will need to install the Pillow library manually. There should be plenty of tutorials available).
   - Wait until it says `Done!` and press any key to close it.
 
 ### Installing VSCode & PlatformIO (For Uploading to the ESP32)
@@ -57,47 +58,48 @@ ProotOS is configured for **two 64×32 HUB75 LED matrix panels chained together*
 | **CLK** | `GPIO 16` | Clock signal |
 | **LAT** | `GPIO 4` | Latch signal |
 | **OE** | `GPIO 15` | Output Enable |
-| **GND** | `GND` | Make sure atleast 1 GND pin is connected to the ESP32 |
+| **GND** | `GND` | Make sure at least 1 GND pin is connected to the ESP32 |
 
 > **Power Note:** Do **not** power the LED matrices directly from the ESP32's 5V pin. Power the HUB75 panels from a dedicated 5V power supply (e.g., a 5V buck converter or high-output power bank), and connect a **GND** wire between the panels/power supply and the ESP32's **GND** pin.
 
 ---
 
-### Wiring the Microphone, Boop Sensor, and Face Button
+### Wiring the Microphone, Boop Sensor, Face Button, and Internal OLED
 
-The sensor pins are defined at the top of `src/main.cpp`:
+The sensor pins are defined at the top of `src/main.cpp`, and the optional internal helmet OLED pins are defined in `src/functions/oled_display.h`:
 
 | Component | ESP32 Pin | How to Wire It |
 | :--- | :--- | :--- |
 | **MAX4466 Microphone** (`MIC_PIN`) | `GPIO 35` | • **VCC** → ESP32 `3.3V`<br>• **GND** → ESP32 `GND`<br>• **OUT** → ESP32 `GPIO 35` |
 | **Boop Sensor** (`BOOP_PIN`) | `GPIO 33` | • Connect your sensor's **3.3V or 5V** and **GND** to the ESP32.<br>• Connect the sensor's **Signal / OUT** pin (which goes HIGH / 3.3V when booped) to `GPIO 33`.<br> |
-| **Face Selector Button** (`FACE_SELECTOR`) | `GPIO 32` | • Wire one leg of a push button to ESP32 **`3.3V or 5V`**.<br>• Wire the other leg of the button to ESP32 **`GPIO 32`**.
+| **Face Selector Button** (`FACE_SELECTOR`) | `GPIO 32` | • Wire one leg of a push button to ESP32 **`3.3V`**.<br>• Wire the other leg of the button to ESP32 **`GPIO 32`**. |
+| **0.91" 128×32 SSD1306 I2C OLED** *(Optional)* | `GPIO 21` (SDA)<br>`GPIO 22` (SCK/SCL) | • **VCC** → ESP32 `3.3V`<br>• **GND** → ESP32 `GND`<br>• **SDA** → ESP32 `GPIO 21`<br>• **SCK / SCL** → ESP32 `GPIO 22`<br>*(Note: At boot, the ESP32 automatically checks if the OLED is plugged in. If no OLED is detected, the 2nd core task stays turned off to save compute power!)* |
 
 ---
 
 ## Converting `.png` and `.gif` Files
 
-Before the code can use an image or .gif file, it has to be converted into raw code. Two python scripts are provided for that, convgif.py and convimg.py for .gif and .png images respectively. 
+Before the code can use an image or `.gif` file, it has to be converted into raw code. Two Python scripts are provided for that: `convgif.py` and `convimg.py` for `.gif` and `.png` images respectively.
 
-All facial sprites and GIF animations live in the **`lib/FacialSprites/`** folder. Each sprite/GIF is drawn for **one side of the visor (64×32 pixels)** and is automatically mirrored to the second panel by the code (unless you turn mirroring off). The images must remain inside the directory to be included in the code when you run the python scripts. 
+All facial sprites and GIF animations live in the **`lib/FacialSprites/`** folder. Each sprite/GIF is drawn for **one side of the visor (64×32 pixels)** and is automatically mirrored to the second panel by the code (unless you turn mirroring off). The images must remain inside the directory to be included in the code when you run the Python scripts.
 
 - **To add or update `.png` sprites (faces, mouths, static boop images):**
   - Place your `64×32` `.png` files directly into `lib/FacialSprites/`.
   - Double-click **`run convimg.bat`** (Windows only).
     - If you are on Mac/Linux, you will need to run the Python command manually:
-    - python convimg.py
+    - `python convimg.py`
   - This automatically packs all `.png` files in that folder into `lib/FacialSprites/images.h`. The variable name in code will match the filename (for example, `happy.png` becomes `happy` in the code).
 - **To add or update `.gif` animations (animated boop reactions):**
   - Place your `64×32` `.gif` files directly into `lib/FacialSprites/`.
   - Double-click **`run convgif.bat`** (Windows only).
    - If you are on Mac/Linux, you will need to run the Python command manually:
-   - python convgif.py
+    - `python convgif.py`
   - This automatically packs all `.gif` files in that folder into `lib/FacialSprites/animations.h`. The variable name in code will match the filename (for example, `spiral.gif` becomes `spiral` in the code).
 
 ---
 
 ## Facial Expression Selector
-The library includes a multiple All facial expressions are configured in **`src/user/faces.h`**
+The library includes multiple facial expressions that you can cycle through. All facial expressions are configured in **`src/user/faces.h`**.
 
 ### Adding a New Face
 
@@ -135,7 +137,7 @@ const Face* faceSelector[MAX_FACES] = {
   &normalFace,
   &smugFace,
   &normalSilentFace,
-  '&normalFace'         // <-- Added here
+  &newFace          // <-- Added here
 };
 ```
 The code will automatically add it to your face pools, and pressing your Face Selector button will now cycle through your new face.
@@ -174,7 +176,7 @@ const Boop boopBk = {
 // Example B: Holding a static .png image (from images.h)
 const Boop boopBsod = {
   .animation    = nullptr,    // No GIF animation
-  .staticSprite = boopBsod,     // Name of your .png file (no `&` needed for static sprites)
+  .staticSprite = bsod,         // Name of your .png file (no `&` needed for static sprites)
   .holdTime     = 2500,       // Hold on screen for 2500 ms (2.5 seconds)
   .offsetX      = 0,
   .offsetY      = 0,
@@ -194,8 +196,8 @@ const Boop* boopPool[MAX_BOOP_ANIMATIONS] = {
   &boopBk2,
   &boopAmogus,
   &boopBsod,
-  '&boopBk', // <-- Added here
-  '&boopBsod'   // <-- Added here
+  &yourNewBoop,  // <-- Added here
+  &yourOtherBoop // <-- Added here
 };
 ```
 

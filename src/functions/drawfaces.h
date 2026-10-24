@@ -14,6 +14,7 @@
 #include <Adafruit_GFX.h>
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #include "facemodifiers.h"
+#include "oled_display.h"
 
 // Sprite & Animation Data
 #include "images.h"
@@ -153,6 +154,7 @@ void drawFace(int offset_x, int offset_y, const uint32_t image[], bool overlay, 
   // Clear the back buffer unless overlaying on top of existing content
   if (!overlay) {
     display->clearScreen();
+    oledClearBuffer();
   }
 
   // Decode Run-Length Encoded (RLE) RGB565 Pixel Data into a reusable static buffer
@@ -187,9 +189,11 @@ void drawFace(int offset_x, int offset_y, const uint32_t image[], bool overlay, 
     }
 
     display->drawPixel(x + offset_x, y + offset_y, currpix);
+    oledDrawPixel(x + offset_x, y + offset_y, currpix);
 
     if (mirror) {
       display->drawPixel(offset_x + imgWidth * 2 - x - 1, y + offset_y, currpix);
+      oledDrawPixel(offset_x + imgWidth * 2 - x - 1, y + offset_y, currpix);
     }
   }
 
@@ -199,6 +203,7 @@ void drawFace(int offset_x, int offset_y, const uint32_t image[], bool overlay, 
   }
 
   display->flipDMABuffer();
+  oledCommitFrame();
 }
 
 /**
@@ -236,6 +241,7 @@ void playAnimation(int offset_x, int offset_y, Animation animation, bool overlay
     // Clear the back buffer if overlay is disabled
     if (!overlay) {
       display->clearScreen();
+      oledClearBuffer();
     }
 
     // Unpack Frame Metadata
@@ -261,9 +267,11 @@ void playAnimation(int offset_x, int offset_y, Animation animation, bool overlay
         pixel_index++;
 
         display->drawPixel(x + offset_x, y + offset_y, rgb565);
+        oledDrawPixel(x + offset_x, y + offset_y, rgb565);
 
         if (mirror) {
           display->drawPixel(offset_x + Width * 2 - x - 1, y + offset_y, rgb565);
+          oledDrawPixel(offset_x + Width * 2 - x - 1, y + offset_y, rgb565);
         }
       }
     }
@@ -272,6 +280,7 @@ void playAnimation(int offset_x, int offset_y, Animation animation, bool overlay
     offset += frameDataSize + 1;
 
     display->flipDMABuffer();
+    oledCommitFrame();
     delay(frameDuration);
   }
 }
