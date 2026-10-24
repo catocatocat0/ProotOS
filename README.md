@@ -44,12 +44,12 @@ ProotOS is configured for **two 64×32 HUB75 LED matrix panels chained together*
 
 | HUB75 Panel Pin | ESP32 GPIO Pin | Description |
 | :--- | :--- | :--- |
-| **R1** | `GPIO 25` | Top half Red data |
-| **G1** | `GPIO 26` | Top half Green data |
-| **B1** | `GPIO 27` | Top half Blue data |
-| **R2** | `GPIO 14` | Bottom half Red data |
-| **G2** | `GPIO 12` | Bottom half Green data |
-| **B2** | `GPIO 13` | Bottom half Blue data |
+| **R1/(Also Called R0 on some boards)** | `GPIO 25` | Top half Red data |
+| **G1/G0** | `GPIO 26` | Top half Green data |
+| **B1/B0** | `GPIO 27` | Top half Blue data |
+| **R2/R1** | `GPIO 14` | Bottom half Red data |
+| **G2/G1** | `GPIO 12` | Bottom half Green data |
+| **B2/B1** | `GPIO 13` | Bottom half Blue data |
 | **A** | `GPIO 23` | Row address line A |
 | **B** | `GPIO 19` | Row address line B |
 | **C** | `GPIO 5` | Row address line C |
@@ -60,7 +60,9 @@ ProotOS is configured for **two 64×32 HUB75 LED matrix panels chained together*
 | **OE** | `GPIO 15` | Output Enable |
 | **GND** | `GND` | Make sure at least 1 GND pin is connected to the ESP32 |
 
-> **Power Note:** Do **not** power the LED matrices directly from the ESP32's 5V pin. Power the HUB75 panels from a dedicated 5V power supply (e.g., a 5V buck converter or high-output power bank), and connect a **GND** wire between the panels/power supply and the ESP32's **GND** pin.
+If any pins are unspecified, then you can leave them either connected to GND or dangling.
+
+> **Note:** Do **not** power the LED matrices directly from the ESP32's 5V pin. Power the HUB75 panels from a dedicated 5V power supply (e.g., a 5V buck converter or high-output power bank), and connect a **GND** wire between the panels/power supply and the ESP32's **GND** pin.
 
 ---
 
@@ -99,7 +101,11 @@ All facial sprites and GIF animations live in the **`lib/FacialSprites/`** folde
 ---
 
 ## Facial Expression Selector
+<<<<<<< HEAD
 The library includes multiple facial expressions that you can cycle through. All facial expressions are configured in **`src/user/faces.h`**.
+=======
+All facial expressions are configured in **`src/user/faces.h`**
+>>>>>>> b8534b27612abef0cd22edfde7c1cdd6f1fc6080
 
 ### Adding a New Face
 
@@ -155,7 +161,7 @@ ProotOS uses a weighted pool system for boops: when someone boops your visor, it
 Open **`src/user/boops.h`**. A `Boop` can be:
 - **A GIF animation** (set `.animation = &yourGif` and `.staticSprite = nullptr`)
 - **A static `.png` image held for a set time** (set `.animation = nullptr` and `.staticSprite = yourPng`)
-- **Chained (GIF followed immediately by a static image!)** (set **both** `.animation = &yourGif` and `.staticSprite = yourPng`—the GIF will play first, and then the static image will hold on screen for `.holdTime` milliseconds!)
+
 
 If you define both a gif and a static animation, it will play both of them sequentially with the animation coming first.
 
